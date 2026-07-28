@@ -114,16 +114,30 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 ## Обновление
 
-```bash
-# локально
-cd frontend && npm run build && rsync -avz --delete dist/ patita:/var/www/news.prema.su/
+Прод развёрнут как git-чекаут `/opt/iskcon-news`, обновляется одной командой:
 
-# на сервере
-cd /opt/iskcon-news && git pull
-backend/.venv/bin/pip install -r backend/requirements.txt
-cd backend && ../backend/.venv/bin/alembic upgrade head
-systemctl restart iskcon-news
+```bash
+ssh patita /opt/iskcon-news/deploy/update.sh
 ```
+
+Скрипт забирает свежий `main`, доставляет зависимости бэкенда, накатывает
+миграции, пересобирает фронтенд на сервере (там стоит Node 20.19), раскладывает
+статику, чинит права и перезапускает сервис. В конце проверяет `/api/health`
+и ответ сайта снаружи.
+
+Порядок работы: коммит и `git push` с рабочей машины → `update.sh` на сервере.
+
+Откатиться на предыдущий коммит:
+
+```bash
+ssh patita 'cd /opt/iskcon-news && git reset --hard HEAD~1 && systemctl restart iskcon-news'
+```
+
+Файл `.env` в git не входит и обновлением не затрагивается; резервная копия
+боевого лежит в `/root/iskcon-news.env.backup`.
+
+Каталог принадлежит `www-data`, поэтому для git от root прописано исключение:
+`git config --global --add safe.directory /opt/iskcon-news`.
 
 ## Что проверить перед выкладкой
 
