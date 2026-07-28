@@ -1,0 +1,161 @@
+@import url("https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=optional");
+@import url("themes.css");
+
+/*
+ * Canonical cross-screen contract.
+ * OpsShell is the sole owner of navigation, page header, density and responsive
+ * shell behavior. Page-specific layers own only the evidence composition below.
+ */
+:root{
+ --font:"Onest",ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+ --ui-canvas:var(--scheme-canvas);
+ --ui-surface:var(--scheme-sidebar);
+ --ui-surface-muted:var(--scheme-surface-muted);
+ --ui-line:var(--scheme-border);
+ --ui-line-soft:var(--scheme-border-soft);
+ --ui-ink:var(--scheme-text);
+ --ui-copy:var(--scheme-text-secondary);
+ --ui-muted:var(--scheme-text-muted);
+ --ui-blue:var(--scheme-accent);
+ --ui-blue-soft:var(--scheme-accent-soft);
+ --ui-sidebar:214px;
+ --ui-sidebar-rail:74px;
+ --ui-page-x:28px;
+ --ui-page-y:24px;
+ --ui-header-gap:18px;
+ --ui-radius:8px;
+ --ui-radius-sm:6px;
+ --ui-control:34px;
+ --ui-control-sm:30px;
+ --ui-row:42px;
+ --ui-page-title:24px;
+ --ui-section-title:14px;
+ --ui-body:12px;
+ --ui-meta:11px;
+ --ui-micro:10px;
+}
+/* Keep static-page slot content out of the first paint until OpsShell owns it. */
+ops-shell:not(:defined){display:block;visibility:hidden}
+
+html{font-family:var(--font);font-size:var(--ui-body);background:var(--ui-canvas)}
+body,.exp-body,.workspace-body{background:var(--ui-canvas);color:var(--ui-ink);font-family:var(--font);font-size:var(--ui-body);line-height:1.4}
+button,input,select,textarea{font-family:inherit}
+ops-shell{display:block;min-height:100vh}
+
+/* The only runtime shell and main-content geometry. */
+.ui-shell{min-height:100vh;display:grid;grid-template-columns:var(--ui-sidebar) minmax(0,1fr)}
+.ui-main{min-width:0;padding:var(--ui-page-y) var(--ui-page-x) 40px;max-width:none}
+
+.ui-sidebar{
+ position:sticky;top:0;z-index:30;width:auto;height:100vh;padding:18px 14px 14px;
+ display:flex;flex-direction:column;background:var(--ui-surface);border-right:1px solid var(--ui-line);
+}
+.ui-brand{display:flex;align-items:center;gap:10px;min-height:32px;padding:0 8px 17px;color:var(--ui-ink);text-decoration:none}
+.ui-brand-mark{display:grid;place-items:center;width:23px;height:23px;border-radius:5px;background:var(--ui-blue);color:#fff;font-size:10px;font-weight:800;letter-spacing:-.02em}
+.ui-brand-copy{display:grid;gap:1px;font-size:12px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
+.ui-brand-copy small{color:var(--ui-muted);font-size:var(--ui-micro);font-weight:650;letter-spacing:.065em;text-transform:uppercase}
+.ui-nav-section{margin-top:8px}
+.ui-nav-label{padding:7px 10px 5px;color:var(--scheme-text-faint);font-size:var(--ui-micro);font-weight:750;letter-spacing:.085em;text-transform:uppercase}
+.ui-nav-list{display:grid;gap:2px}
+.ui-nav-link{display:flex;align-items:center;gap:10px;min-height:34px;padding:0 9px;border-radius:var(--ui-radius-sm);color:var(--scheme-text-secondary);text-decoration:none;font-size:12px;font-weight:600;white-space:nowrap}
+.ui-nav-link:hover{background:var(--scheme-surface-hover);color:var(--ui-ink)}
+.ui-nav-link[aria-current="page"]{background:var(--ui-blue-soft);color:var(--ui-blue);font-weight:700}
+.ui-nav-icon{display:grid;place-items:center;width:17px;height:17px;flex:0 0 17px;color:var(--scheme-text-muted)}
+.ui-nav-icon svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ui-nav-link[aria-current="page"] .ui-nav-icon{color:var(--ui-blue)}
+.ui-theme-toggle{display:flex;align-items:center;gap:9px;min-height:32px;margin-top:auto;padding:0 9px;border:1px solid transparent;border-radius:var(--ui-radius-sm);background:transparent;color:var(--scheme-text-secondary);font-size:11px;font-weight:650;text-align:left;cursor:pointer}
+.ui-theme-toggle:hover{background:var(--scheme-surface-hover);color:var(--ui-ink)}
+.ui-theme-toggle:focus-visible{outline:3px solid var(--scheme-focus);outline-offset:1px}
+.ui-theme-icon{display:grid;place-items:center;width:17px;height:17px;flex:0 0 17px;color:var(--ui-blue);font-size:14px}
+.ui-profile{display:grid;grid-template-columns:30px minmax(0,1fr) 22px;align-items:center;gap:9px;margin-top:9px;padding:13px 8px 1px;border-top:1px solid var(--ui-line-soft)}
+.ui-avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--scheme-text-secondary);color:var(--scheme-canvas);font-size:10px;font-weight:750}
+.ui-profile-copy{display:grid;gap:1px;min-width:0}
+.ui-profile-copy b{overflow:hidden;color:var(--ui-ink);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.ui-profile-copy small{color:var(--ui-muted);font-size:10px}
+.ui-profile button{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;background:transparent;color:var(--ui-muted);font-size:12px}
+
+/* The only runtime page-header hierarchy. */
+.ui-page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;min-height:62px;margin-bottom:var(--ui-header-gap)}
+.ui-title-row{display:flex;gap:10px;align-items:flex-start;min-width:0}
+.ui-page-heading{min-width:0}
+.ui-eyebrow{margin:0 0 4px;color:var(--ui-muted);font-size:var(--ui-micro);font-weight:750;letter-spacing:.075em;line-height:1.3;text-transform:uppercase}
+.ui-page-title{margin:0;color:var(--ui-ink);font-size:var(--ui-page-title);font-weight:770;letter-spacing:-.035em;line-height:1.2}
+.ui-page-subtitle{display:block;margin:5px 0 0;color:var(--ui-muted);font-size:var(--ui-body);line-height:1.4}
+.ui-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+
+/* Content-level label aliases; they do not own shell geometry. */
+.exp-eyebrow,.ws-eyebrow{margin:0 0 4px;color:var(--ui-muted);font-size:var(--ui-micro);font-weight:750;letter-spacing:.075em;line-height:1.3;text-transform:uppercase}
+
+/* One control scale: 34px primary, 30px supporting. */
+.ui-header-actions select,.ui-header-actions .exp-button,.ui-header-actions .exp-icon-button,
+.ws-btn,.ws-select,.ws-input{
+ min-height:var(--ui-control);height:var(--ui-control);border:1px solid var(--scheme-border);border-radius:var(--ui-radius-sm);
+ background:var(--scheme-control);color:var(--scheme-text-secondary);font-size:var(--ui-body);font-weight:650;
+}
+.ui-header-actions select,.ws-select{padding-inline:10px 30px}
+.ui-header-actions .exp-button,.ws-btn{padding-inline:11px}
+.ui-header-actions .exp-icon-button,.ws-icon-btn{width:var(--ui-control);padding:0}
+.ui-header-actions .ui-button-primary{border-color:var(--ui-blue);background:var(--ui-blue);color:#fff}
+.ui-header-actions .ui-button-primary:hover{border-color:var(--scheme-accent-hover);background:var(--scheme-accent-hover);color:#fff}
+.ui-header-actions .ui-button-quiet{border-color:transparent;background:transparent;color:var(--ui-muted)}
+.ui-header-actions .ui-button-quiet:hover{border-color:transparent;background:var(--scheme-surface-hover);color:var(--ui-ink)}
+.ws-control-sm,.explorer-command select,.explorer-command .exp-button,.queue-command select,.queue-command .exp-button,
+.queue-pagination .exp-button,.queue-bulk .exp-button,.inspector-actions .exp-button,.queue-inspector-actions button{
+ min-height:var(--ui-control-sm);height:var(--ui-control-sm);font-size:var(--ui-meta);border-radius:5px;
+}
+.exp-button:hover,.exp-icon-button:hover,.ws-btn:hover{border-color:var(--scheme-border-strong);background:var(--scheme-control-hover)}
+
+/* Reusable surfaces share chrome, not composition. */
+.exp-card,.ws-surface,.ws-signal-strip,.ws-summary-line,.ws-entity-hero,.explorer-workspace,.queue-workspace,.queue-signal-strip,
+.explorer-command,.queue-command,.ws-control-bar,.ws-catalog-list,.ws-catalog-facts{
+ border-color:var(--ui-line);border-radius:var(--ui-radius);box-shadow:0 1px 2px rgba(30,45,60,.025);
+}
+.exp-card{padding:16px}
+.ws-surface-head,.explorer-workspace-head,.queue-workspace-head{padding:13px 15px 11px;border-bottom-color:var(--ui-line-soft)}
+.exp-card-head h2,.ws-surface-title,.explorer-workspace-head h2,.queue-workspace-head h2{font-size:var(--ui-section-title);font-weight:750;line-height:1.25;letter-spacing:-.01em}
+.exp-card-head>span,.exp-card-head p,.ws-surface-note,.explorer-workspace-head p,.queue-workspace-head p{font-size:var(--ui-meta);line-height:1.4}
+.ws-surface-body{padding:15px}
+
+/* One status and chip profile. */
+.ws-badge,.explorer-chip,.queue-chip,.queue-tag,.inspector-status-row .status,.exp-event-tag{
+ border-radius:4px;font-size:var(--ui-meta);font-weight:720;line-height:1.2;
+}
+.ws-badge{padding:4px 7px}
+.ws-chip{min-height:24px;border-radius:4px;font-size:var(--ui-meta)}
+
+/* Table scale remains dense and predictable. */
+.ws-table,.explorer-table,.queue-table{font-size:var(--ui-body)}
+.ws-table th,.explorer-table th,.queue-table th{height:36px;padding-block:0;background:var(--scheme-surface-muted);color:var(--ui-muted);font-size:var(--ui-micro);letter-spacing:.05em}
+.ws-table td,.explorer-table td,.queue-table td{height:var(--ui-row);padding-block:6px;border-bottom-color:var(--ui-line-soft);font-size:var(--ui-body)}
+.ws-table a,.explorer-asset-link,.queue-task-link{font-size:var(--ui-body)}
+
+/* Visualization chrome follows the same evidence scale. */
+.ws-chart text,.exp-chart .axis-label{font-size:var(--ui-micro)}
+.ws-question,.ws-chart-readout,.exp-chart-foot{font-size:var(--ui-meta)}
+.ws-chart .grid,.exp-chart .grid{stroke:var(--scheme-chart-grid)}
+.ws-chart .line,.exp-chart .series{stroke:var(--ui-blue);stroke-width:2}
+
+html[data-density="compact"],body[data-density="compact"]{--ui-row:34px;--ui-page-y:20px;--ui-header-gap:14px}
+html[data-density="compact"] .exp-card,body[data-density="compact"] .ws-surface-body{padding:12px}
+html[data-density="compact"] .ui-main{padding-top:var(--ui-page-y)}
+html[data-density="compact"] .explorer-table td,html[data-density="compact"] .queue-table td,body.workspace-body[data-density="compact"] .ws-table td{height:var(--ui-row);padding-block:4px}
+
+.ui-mobile-menu{display:none}
+
+@media(max-width:1100px) and (min-width:761px){
+ .ui-shell{grid-template-columns:var(--ui-sidebar-rail) minmax(0,1fr)}
+ .ui-sidebar{padding-inline:10px}
+ .ui-brand{justify-content:center;padding-inline:0}.ui-brand-copy,.ui-nav-label,.ui-nav-link span:last-child,.ui-profile-copy,.ui-theme-toggle span:last-child{display:none}
+ .ui-nav-link,.ui-theme-toggle{justify-content:center;padding:0}.ui-profile{grid-template-columns:1fr;padding-inline:0}.ui-avatar{margin:auto}.ui-profile button{display:none}
+}
+
+@media(max-width:760px){
+ :root{--ui-page-x:14px;--ui-page-y:16px}
+ .ui-shell{display:block}.ui-main{padding:var(--ui-page-y) var(--ui-page-x) 36px}
+ .ui-sidebar{position:fixed;left:0;top:0;width:min(286px,86vw);height:100vh;padding:18px 14px;transform:translateX(-105%);transition:transform var(--motion);box-shadow:16px 0 40px rgba(20,31,45,.16);border-bottom:0}
+ .ui-sidebar.open{transform:none}
+ .ui-mobile-menu{display:inline-grid;place-items:center;flex:0 0 auto;width:34px;height:34px;padding:0;border:1px solid var(--scheme-border);border-radius:6px;background:var(--scheme-control);color:var(--scheme-text-secondary);font-size:14px}
+ .ui-page-header{display:grid;gap:12px}.ui-header-actions{justify-content:flex-start}
+}
+
+@media(prefers-reduced-motion:reduce){.ui-sidebar{transition:none}}

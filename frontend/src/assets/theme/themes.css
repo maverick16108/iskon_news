@@ -1,0 +1,222 @@
+/*
+ * Color schemes are intentionally semantic. To add another scheme, define the
+ * same --scheme-* variables under html[data-theme="scheme-name"]. Components
+ * consume aliases, never scheme-specific hex values.
+ */
+:root,
+html[data-theme="light"]{
+ color-scheme:light;
+ --scheme-canvas:#f6f8fb;
+ --scheme-sidebar:#ffffff;
+ --scheme-surface:#ffffff;
+ --scheme-surface-raised:#ffffff;
+ --scheme-surface-muted:#f8fafc;
+ --scheme-surface-hover:#f8fbff;
+ --scheme-surface-selected:#eaf2ff;
+ --scheme-border:#dce3eb;
+ --scheme-border-soft:#e8edf2;
+ --scheme-border-strong:#c7d1dd;
+ --scheme-text:#10233f;
+ --scheme-text-secondary:#314966;
+ --scheme-text-muted:#718198;
+ --scheme-text-faint:#8794a6;
+ --scheme-accent:#1768ff;
+ --scheme-accent-hover:#075ce7;
+ --scheme-accent-soft:#eaf2ff;
+ --scheme-focus:rgba(23,104,255,.22);
+ --scheme-success:#138453;
+ --scheme-success-soft:#e8f7ef;
+ --scheme-warning:#b66700;
+ --scheme-warning-soft:#fff5df;
+ --scheme-danger:#bd3232;
+ --scheme-danger-soft:#fff0f0;
+ --scheme-info:#075fe4;
+ --scheme-info-soft:#eaf2ff;
+ --scheme-overlay:rgba(26,35,48,.18);
+ --scheme-shadow:rgba(31,50,73,.12);
+ --scheme-chart-grid:#e4eaf1;
+ --scheme-chart-axis:#cbd5e1;
+ --scheme-control:#ffffff;
+ --scheme-control-hover:#f8fafc;
+ --scheme-code:#142b47;
+}
+
+html[data-theme="dark"]{
+ color-scheme:dark;
+ --scheme-canvas:#292a32;
+ --scheme-sidebar:#25262e;
+ --scheme-surface:#32333d;
+ --scheme-surface-raised:#383a46;
+ --scheme-surface-muted:#2d2e37;
+ --scheme-surface-hover:#3a3d49;
+ --scheme-surface-selected:#293e55;
+ --scheme-border:#454751;
+ --scheme-border-soft:#3d3f49;
+ --scheme-border-strong:#585b68;
+ --scheme-text:#f2f3f6;
+ --scheme-text-secondary:#c4c8d2;
+ --scheme-text-muted:#9ca3b2;
+ --scheme-text-faint:#7f8797;
+ --scheme-accent:#2da7ff;
+ --scheme-accent-hover:#59b9ff;
+ --scheme-accent-soft:#263f55;
+ --scheme-focus:rgba(45,167,255,.3);
+ --scheme-success:#62d49b;
+ --scheme-success-soft:#253c34;
+ --scheme-warning:#ffc66d;
+ --scheme-warning-soft:#443827;
+ --scheme-danger:#ff8f92;
+ --scheme-danger-soft:#472f35;
+ --scheme-info:#77baff;
+ --scheme-info-soft:#293b50;
+ --scheme-overlay:rgba(8,9,13,.56);
+ --scheme-shadow:rgba(0,0,0,.28);
+ --scheme-chart-grid:#464954;
+ --scheme-chart-axis:#5c606d;
+ --scheme-control:#30313a;
+ --scheme-control-hover:#3a3c47;
+ --scheme-code:#20242d;
+}
+
+/* Compatibility aliases while page modules migrate to semantic tokens. */
+:root{
+ --canvas:var(--scheme-canvas);
+ --surface:var(--scheme-surface);
+ --surface-subtle:var(--scheme-surface-muted);
+ --surface-raised:var(--scheme-surface-raised);
+ --border:var(--scheme-border);
+ --border-strong:var(--scheme-border-strong);
+ --ink:var(--scheme-text);
+ --ink-2:var(--scheme-text-secondary);
+ --muted:var(--scheme-text-muted);
+ --inverse:#fff;
+ --blue:var(--scheme-accent);
+ --green:var(--scheme-success);
+ --amber:var(--scheme-warning);
+ --red:var(--scheme-danger);
+ --selected:var(--scheme-surface-selected);
+ --disabled:var(--scheme-text-faint);
+ --shadow:0 1px 2px var(--scheme-shadow);
+ --raised:0 10px 30px var(--scheme-shadow);
+ --exp-bg:var(--scheme-canvas);
+ --exp-panel:var(--scheme-surface);
+ --exp-line:var(--scheme-border);
+ --exp-blue:var(--scheme-accent);
+ --exp-blue-soft:var(--scheme-accent-soft);
+ --exp-green:var(--scheme-success);
+ --exp-red:var(--scheme-danger);
+}
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] .exp-body,
+html[data-theme="dark"] .workspace-body{background:var(--scheme-canvas);color:var(--scheme-text)}
+
+html[data-theme="dark"] :is(button,input,select,textarea){color:var(--scheme-text-secondary)}
+html[data-theme="dark"] :is(input,textarea)::placeholder{color:var(--scheme-text-faint)}
+
+html[data-theme="dark"] :is(
+ .exp-card,.ws-surface,.ws-signal-strip,.ws-summary-line,.ws-entity-hero,
+ .explorer-workspace,.queue-workspace,.queue-signal-strip,.ws-catalog-facts,
+ .ws-catalog-list,.explorer-expand-content,.queue-expand-content
+){background:var(--scheme-surface);border-color:var(--scheme-border);color:var(--scheme-text)}
+
+html[data-theme="dark"] :is(
+ .explorer-command,.queue-command,.ws-control-bar,.ws-save-bar,.exp-popover,
+ .explorer-columns-menu,.explorer-inspector,.queue-inspector,.ws-state-demo
+){background:var(--scheme-surface-raised);border-color:var(--scheme-border);color:var(--scheme-text)}
+
+html[data-theme="dark"] :is(.exp-selection,.queue-tabs){background:var(--scheme-surface-muted);border-color:var(--scheme-border);color:var(--scheme-text-muted)}
+
+html[data-theme="dark"] :is(
+ .exp-button,.exp-icon-button,.exp-card select,.ws-btn,.ws-select,.ws-input,
+ .explorer-command select,.queue-command select,.explorer-search,.queue-search,
+ .queue-edit-grid select,.queue-inspector-actions button,.queue-comment textarea,
+ .queue-comment button
+){background:var(--scheme-control);border-color:var(--scheme-border);color:var(--scheme-text-secondary)}
+
+html[data-theme="dark"] :is(
+ .exp-button,.exp-icon-button,.ws-btn,.explorer-command .exp-button,
+ .queue-command .exp-button,.queue-inspector-actions button,.queue-comment button
+):hover{background:var(--scheme-control-hover);border-color:var(--scheme-border-strong);color:var(--scheme-text)}
+
+html[data-theme="dark"] :is(
+ .ws-surface-head,.explorer-workspace-head,.queue-workspace-head,.exp-ranking li,
+ .exp-event,.exp-inline-metrics,.exp-inline-metric,.ws-event,.ws-alert-row,
+ .ws-property,.ws-inspector-section,.ws-form-section,.ws-switch-row,
+ .ws-type-row,.ws-permission th,.ws-permission td,.ws-signal,.ws-summary-item,
+ .queue-signal-strip>div,.ws-catalog-fact,.ws-list-row
+){border-color:var(--scheme-border-soft)}
+
+html[data-theme="dark"] .ws-list-row{background:var(--scheme-surface)}
+
+html[data-theme="dark"] :is(.ws-table th,.explorer-table th,.queue-table th){background:var(--scheme-surface-muted);color:var(--scheme-text-muted);border-color:var(--scheme-border)}
+html[data-theme="dark"] :is(.ws-table td,.explorer-table td,.queue-table td){color:var(--scheme-text-secondary);border-color:var(--scheme-border-soft)}
+html[data-theme="dark"] :is(.ws-table tbody tr:hover td,.explorer-table tbody tr:hover td,.queue-table tbody tr:hover td,.ws-list-row:hover,.ws-list-row.is-active){background:var(--scheme-surface-hover)}
+html[data-theme="dark"] :is(.ws-row-detail td,.explorer-expand-row td,.queue-expand-row td){background:var(--scheme-surface-muted)!important}
+
+html[data-theme="dark"] :is(
+ .ws-surface-title,.ws-signal-value,.ws-summary-item strong,.ws-cell-title,
+ .ws-alert-name,.ws-entity-name,.ws-property dd,.ws-list-row h3,
+ .ws-detail-grid strong,.ws-switch-copy strong,.explorer-workspace-head h2,
+ .queue-workspace-head h2,.explorer-table .asset-link,.queue-task-link,
+ .explorer-expand-content b,.queue-expand-content b,.inspector-grid dd,
+ .queue-inspector-properties dd,.queue-signal-strip p b,.explorer-empty b,
+ .queue-empty b,.ws-empty strong,.ws-catalog-row strong
+){color:var(--scheme-text)}
+
+html[data-theme="dark"] :is(
+ .ws-surface-note,.ws-question,.ws-chart-readout,.ws-signal-meta,.ws-alert-copy,
+ .ws-entity-meta,.ws-timeline-copy,.ws-list-row p,.ws-list-meta,
+ .ws-list-impact,.ws-inspector-section p,.ws-detail-grid span,.ws-form-section>p,
+ .ws-help,.ws-switch-copy span,.ws-type-token,.ws-empty,.ws-no-results,
+ .explorer-workspace-head p,.explorer-summary-line,.explorer-table .cell-muted,
+ .explorer-footer,.explorer-expand-content span,.queue-summary-line,.queue-footer,
+ .queue-signal-strip span,.queue-signal-strip small,.queue-signal-strip p,
+ .queue-assignee,.queue-next,.queue-inspector-properties dt,.queue-comment label,
+ .inspector-grid dt,.inspector-note,.exp-card-head>span,.exp-card-head p,
+ .exp-event time,.exp-event strong,.exp-inline-metric span,.exp-chart-foot
+){color:var(--scheme-text-muted)}
+
+html[data-theme="dark"] :is(.ws-chip,.ws-badge,.explorer-chip,.queue-chip,.exp-event-tag,.ws-tab-count){background:var(--scheme-surface-selected);color:var(--scheme-text-secondary)}
+html[data-theme="dark"] :is(.ws-badge.critical,.exp-event-tag.critical,.queue-tag.p1,.inspector-status-row .status.incident,.inspector-status-row .status.risk,.explorer-table .status.incident,.explorer-table .status.risk){background:var(--scheme-danger-soft);color:var(--scheme-danger)}
+html[data-theme="dark"] :is(.ws-badge.warning,.exp-event-tag.warning,.queue-tag.p2,.inspector-status-row .status.warning,.explorer-table .status.warning){background:var(--scheme-warning-soft);color:var(--scheme-warning)}
+html[data-theme="dark"] :is(.ws-badge.healthy,.ws-badge.success,.exp-event-tag.success,.inspector-status-row .status.healthy,.explorer-table .status.healthy){background:var(--scheme-success-soft);color:var(--scheme-success)}
+html[data-theme="dark"] :is(.explorer-table .status.maintenance,.inspector-status-row .status.maintenance,.queue-tag.p3){background:var(--scheme-surface-muted);color:var(--scheme-text-muted)}
+html[data-theme="dark"] :is(.ws-badge.info,.ws-settings-nav button.is-active){background:var(--scheme-info-soft);color:var(--scheme-info)}
+
+html[data-theme="dark"] :is(.ws-tabs,.exp-segmented,.ws-kbd){border-color:var(--scheme-border);background:transparent}
+html[data-theme="dark"] :is(.exp-segmented button.active,.ws-settings-nav button.is-active,.exec-priority-selected){background:var(--scheme-surface-selected)!important;color:var(--scheme-accent)}
+html[data-theme="dark"] :is(.exp-ranking button:hover,.exp-ranking button:focus-visible,.exp-popover button:hover,.exp-menu-wrap a:hover,.explorer-table .row-actions button:hover,.queue-row-action button:hover){background:var(--scheme-surface-hover);color:var(--scheme-text)}
+
+html[data-theme="dark"] .exp-active{background:linear-gradient(145deg,#39475a,#334051);border-color:#50637a;color:var(--scheme-text)}
+html[data-theme="dark"] .exp-active .exp-spark path{stroke:var(--scheme-accent)}
+html[data-theme="dark"] .exp-active .exp-delta.positive{color:var(--scheme-success)}
+html[data-theme="dark"] .exp-signals{background:linear-gradient(145deg,#30495b,#2c4050);border-color:#456477}
+html[data-theme="dark"] .exp-errors{background:var(--scheme-surface);border-color:#70444a;box-shadow:inset 0 0 0 1px rgba(255,143,146,.08)}
+html[data-theme="dark"] .exp-errors.is-selected{background:var(--scheme-danger-soft)}
+html[data-theme="dark"] .exp-status-grid button{background:var(--scheme-success-soft);border-color:#365347;color:var(--scheme-text)}
+html[data-theme="dark"] .exp-status-grid button.degraded,
+html[data-theme="dark"] .exec-status .exp-status-grid button:nth-child(2){background:var(--scheme-warning-soft);border-color:#5b4b32}
+
+html[data-theme="dark"] :is(.ws-inline-alert,.inspector-note){background:var(--scheme-danger-soft);border-color:#684147;color:var(--scheme-text-secondary)}
+html[data-theme="dark"] .ws-annotation{background:var(--scheme-warning-soft);border-color:#5b4b32;color:var(--scheme-warning)}
+html[data-theme="dark"] :is(.explorer-bulk,.queue-bulk){background:var(--scheme-accent-soft);border-color:#3e5870}
+html[data-theme="dark"] :is(.explorer-backdrop,.queue-backdrop){background:var(--scheme-overlay)}
+
+html[data-theme="dark"] :is(.ws-chart .grid,.exp-chart .grid){stroke:var(--scheme-chart-grid)}
+html[data-theme="dark"] .ws-chart .axis{stroke:var(--scheme-chart-axis)}
+html[data-theme="dark"] :is(.ws-chart text,.exp-chart .axis-label){fill:var(--scheme-text-muted)}
+html[data-theme="dark"] :is(.ws-chart .point,.exp-chart .point){fill:var(--scheme-surface);stroke:var(--scheme-accent)}
+html[data-theme="dark"] .ws-chart .threshold{fill:rgba(255,198,109,.1)}
+html[data-theme="dark"] :is(.ws-bar-track,.exp-ranking i,.exp-mini-bars i){background:var(--scheme-border-soft)}
+
+html[data-theme="dark"] .ws-switch{background:#565a67}
+html[data-theme="dark"] .ws-switch::after{background:#e7e9ee;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+html[data-theme="dark"] .ws-switch[aria-checked=true]{background:var(--scheme-accent)}
+html[data-theme="dark"] .ws-skeleton i{background:linear-gradient(90deg,var(--scheme-surface-muted),var(--scheme-surface-hover),var(--scheme-surface-muted));background-size:200% 100%}
+html[data-theme="dark"] .ws-toast{background:#171a21;color:#f5f7fa}
+
+html[data-theme="dark"] :is(.ws-catalog-row,.ws-related a){color:var(--scheme-text-secondary);border-color:var(--scheme-border-soft)}
+html[data-theme="dark"] :is(.ws-catalog-row:hover,.ws-related a:hover){background:var(--scheme-surface-hover)}
+
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}

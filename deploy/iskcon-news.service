@@ -1,0 +1,42 @@
+# systemd-юнит бэкенда. Класть в /etc/systemd/system/iskcon-news.service
+#   systemctl daemon-reload && systemctl enable --now iskcon-news
+
+[Unit]
+Description=Новости ИСККОН — бэкенд (FastAPI)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/iskcon-news/backend
+EnvironmentFile=/opt/iskcon-news/.env
+
+# Одного воркера достаточно: на сервере одно ядро, а нагрузка редакционная
+ExecStart=/opt/iskcon-news/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8101 \
+    --workers 1 \
+    --proxy-headers \
+    --forwarded-allow-ips=127.0.0.1
+
+Restart=on-failure
+RestartSec=5s
+
+# Ограждаем систему от процесса
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/iskcon-news
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iskcon-news
+
+[Install]
+WantedBy=multi-user.target

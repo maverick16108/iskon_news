@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import enum
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+# --------------------------------------------------------------------------
+# Пользователи
+# --------------------------------------------------------------------------
+
+class Role(str, enum.Enum):
+    superadmin = "superadmin"  # заводит пользователей, правит источники и настройки ИИ
+    editor = "editor"          # работает с новостями
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str | None] = mapped_column(String(255))
+    role: Mapped[Role] = mapped_column(Enum(Role, name="user_role"), default=Role.editor)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Кто завёл этого пользователя (у первого суперадмина — пусто)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_by: Mapped[User | None] = relationship(remote_side=[id])
+
+    @property
+    def is_superadmin(self) -> bool:
+        return self.role is Role.superadmin
+
+
+# --------------------------------------------------------------------------
+# Источники новостей
+# --------------------------------------------------------------------------
+
+class SourceKind(str, enum.Enum):
+    rss = "rss"    # RSS/Atom-фид
+    html = "html"  # страница со списком ссылок
+
+
+class Source(Base):
+    __tablename__ = "sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    url: Mapped[str] = mapped_column(String(1024), unique=True)
+    kind: Mapped[SourceKind] = mapped_column(Enum(SourceKind, name="source_kind"), default=SourceKind.rss)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Как источник подписывается в готовом посте:
+    #   «ISKCON News» website  ->  signature_name='ISKCON News', signature_suffix='website'
+    signature_name: Mapped[str | None] = mapped_column(String(255))
+    signature_suffix: Mapped[str] = mapped_column(String(64), default="website")
+
+    fetch_interval_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    articles: Mapped[list[Article]] = relationship(back_populates="source", cascade="all, delete-orphan")
+
+    @property
+    def signature_line(self) -> str:
+        name = self.signature_name or self.name
+        return f"«{name}» {self.signature_suffix}"
+
+
+# --------------------------------------------------------------------------
+# Исходные статьи
+# --------------------------------------------------------------------------
+
+class ContentQuality(str, enum.Enum):
+    full = "full"        # удалось скачать полный текст страницы
+    excerpt = "excerpt"  # только анонс из RSS — для пересказа маловато
+    empty = "empty"      # текста нет вовсе
+
+
+class Article(Base):
+    __tablename__ = "articles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"), index=True)
+    source: Mapped[Source] = relationship(back_populates="articles")
+
+    url: Mapped[str] = mapped_column(String(1024), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(1024))
+    author: Mapped[str | None] = mapped_column(String(255))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+    summary: Mapped[str | None] = mapped_column(Text)   # анонс из фида
+    content: Mapped[str | None] = mapped_column(Text)   # полный текст статьи
+    content_quality: Mapped[ContentQuality] = mapped_column(
+        Enum(ContentQuality, name="content_quality"), default=ContentQuality.empty
+    )
+    image_url: Mapped[str | None] = mapped_column(String(1024))
+    categories: Mapped[list[str] | None] = mapped_column(JSONB)
+
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    post: Mapped[Post | None] = relationship(
+        back_populates="article", cascade="all, delete-orphan", uselist=False
+    )
+
+    @property
+    def text_for_ai(self) -> str:
+        """Текст, который уходит в модель: полный, а если его нет — анонс."""
+        return self.content or self.summary or ""
+
+
+# --------------------------------------------------------------------------
+# Переработанные посты
+# --------------------------------------------------------------------------
+
+class PostStatus(str, enum.Enum):
+    draft = "draft"          # создан, ИИ ещё не отработал
+    generating = "generating"
+    generated = "generated"  # ИИ отработал, ждёт редактора
+    edited = "edited"        # правил человек
+    published = "published"
+    failed = "failed"
+
+
+MAX_POST_CHARS = 1000
+
+
+class Post(Base):
+    __tablename__ = "posts"
+    __table_args__ = (UniqueConstraint("article_id", name="uq_posts_article_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(ForeignKey("articles.id", ondelete="CASCADE"), index=True)
+    article: Mapped[Article] = relationship(back_populates="post")
+
+    # Составные части поста — редактируются по отдельности
+    hashtags: Mapped[str] = mapped_column(String(255), default="")   # "#ятры #фестивали"
+    title: Mapped[str] = mapped_column(String(512), default="")      # выводится жирным
+    body: Mapped[str] = mapped_column(Text, default="")
+    signature: Mapped[str] = mapped_column(String(255), default="")  # «ISKCON News» website
+
+    status: Mapped[PostStatus] = mapped_column(
+        Enum(PostStatus, name="post_status"), default=PostStatus.draft, index=True
+    )
+
+    # Что вернул ИИ до правок человека — чтобы всегда видеть разницу
+    ai_raw_output: Mapped[str | None] = mapped_column(Text)
+    ai_model: Mapped[str | None] = mapped_column(String(128))
+    ai_error: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    edited_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    edited_by: Mapped[User | None] = relationship(foreign_keys=[edited_by_id])
+
+    @property
+    def rendered(self) -> str:
+        """Пост целиком, как он уйдёт в канал.
+
+        Формат снят с живых постов t.me/iskconru: хэштеги и жирный заголовок
+        на одной строке, затем тело, затем двухстрочная подпись.
+        """
+        head = f"{self.hashtags} **{self.title}**".strip()
+        tail = f"{self.signature}\nНовости ИСККОН t.me/iskconru".strip()
+        return f"{head}\n\n{self.body.strip()}\n\n{tail}"
+
+    @property
+    def char_count(self) -> int:
+        return len(self.rendered)
+
+    @property
+    def is_within_limit(self) -> bool:
+        return self.char_count <= MAX_POST_CHARS
+
+
+# --------------------------------------------------------------------------
+# Журнал действий
+# --------------------------------------------------------------------------
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    user: Mapped[User | None] = relationship()
+
+    action: Mapped[str] = mapped_column(String(64), index=True)       # login, user.create, post.publish, ...
+    entity_type: Mapped[str | None] = mapped_column(String(64))
+    entity_id: Mapped[int | None] = mapped_column(Integer)
+    details: Mapped[dict | None] = mapped_column(JSONB)
+    ip: Mapped[str | None] = mapped_column(String(64))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+# --------------------------------------------------------------------------
+# Сессии
+# --------------------------------------------------------------------------
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # случайный токен из куки
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user: Mapped[User] = relationship()
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    ip: Mapped[str | None] = mapped_column(String(64))

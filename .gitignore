@@ -1,0 +1,28 @@
+# Секреты — никогда не коммитим
+.env
+.env.local
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# База данных и данные парсера
+*.db
+*.db-journal
+*.sqlite3
+data/
+
+# Логи
+*.log
+logs/
+
+# macOS / IDE
+.DS_Store
+.idea/
+.vscode/
