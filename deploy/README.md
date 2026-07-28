@@ -13,6 +13,9 @@
 
 ## 1. База данных
 
+Внимание: **системный PostgreSQL слушает порт 5433, а не 5432**. На 5432 висит
+контейнер `laravel-postgres` чужого проекта — подключаться туда нельзя.
+
 ```bash
 ssh patita
 sudo -u postgres psql <<'SQL'
@@ -36,9 +39,10 @@ backend/.venv/bin/pip install -r backend/requirements.txt
 Файл `/opt/iskcon-news/.env` (в git его нет, создаётся руками):
 
 ```ini
-DATABASE_URL=postgresql+asyncpg://iskcon_news:ПАРОЛЬ@localhost:5432/iskcon_news
+DATABASE_URL=postgresql+asyncpg://iskcon_news:ПАРОЛЬ@localhost:5433/iskcon_news
 SECRET_KEY=<python3 -c "import secrets; print(secrets.token_hex(32))">
 FRONTEND_ORIGIN=https://news.prema.su
+COOKIE_SECURE=true
 OPENAI_API_KEY=sk-...
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o
@@ -89,20 +93,24 @@ cp /opt/iskcon-news/deploy/nginx-news.prema.su.conf /etc/nginx/sites-available/n
 ln -s /etc/nginx/sites-available/news.prema.su /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 
-certbot --nginx -d news.prema.su
+certbot --nginx -d news.prema.su --redirect
 ```
 
-После получения сертификата в `.env` уже стоит `https://news.prema.su`, а в
-`backend/app/routers/auth.py` нужно включить `secure=True` у сессионной куки —
-иначе она будет ходить и по HTTP.
+Флаг `secure` у сессионной куки берётся из `COOKIE_SECURE` в `.env` — под HTTPS
+он должен быть `true`, иначе кука поедет и по незащищённому соединению.
 
 ## 7. Регулярный сбор новостей
 
-Обход источников по расписанию — через systemd-таймер или cron:
+`/etc/cron.d/iskcon-news`:
 
 ```cron
-0 * * * * cd /opt/iskcon-news/backend && ./.venv/bin/python cli.py fetch >> /var/log/iskcon-news-fetch.log 2>&1
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+17 * * * * www-data cd /opt/iskcon-news/backend && ../backend/.venv/bin/python cli.py fetch >> /var/log/iskcon-news-fetch.log 2>&1
 ```
+
+Ротация лога настроена в `/etc/logrotate.d/iskcon-news`.
 
 ## Обновление
 

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # Время жизни сессии, часов
     session_ttl_hours: int = 24 * 14
 
+    # Под HTTPS куку надо отдавать только по защищённому соединению.
+    # На проде включается через .env, локально по HTTP остаётся выключенным.
+    cookie_secure: bool = False
+
     @property
     def session_ttl_seconds(self) -> int:
         return self.session_ttl_hours * 3600

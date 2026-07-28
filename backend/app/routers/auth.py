@@ -48,9 +48,9 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
         SESSION_COOKIE,
         token,
         max_age=settings.session_ttl_seconds,
-        httponly=True,      # недоступна из JavaScript — защита от кражи через XSS
+        httponly=True,  # недоступна из JavaScript — защита от кражи через XSS
         samesite="lax",
-        secure=False,       # при выкладке под HTTPS переключить на True
+        secure=settings.cookie_secure,  # под HTTPS включается через COOKIE_SECURE=true
         path="/",
     )
     return user
