@@ -74,9 +74,16 @@ async function generate() {
   notice.value = ''
   try {
     const result = await api.post<Post>(`/api/articles/${articleId}/rewrite`)
-    if (article.value) article.value.post = result
+
+    // Тем же проходом переводятся подписи к фотографиям, поэтому перечитываем
+    // статью целиком, а не только пост — иначе в галерее останутся английские.
+    article.value = await api.get<ArticleDetail>(`/api/articles/${articleId}`)
     syncDraft()
-    notice.value = `Готово: ${result.char_count} символов, модель ${result.ai_model}`
+
+    const translated = article.value.images.filter((i) => i.caption_ru).length
+    notice.value =
+      `Готово: ${result.char_count} символов, модель ${result.ai_model}` +
+      (translated ? `, переведено подписей к фото: ${translated}` : '')
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Переработка не удалась'
   } finally {
