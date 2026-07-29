@@ -58,6 +58,33 @@ async def fetch_html(url: str) -> str:
     raise FetchError(f"{url} вернул HTTP {last_status}")
 
 
+def _fetch_bytes_sync(url: str) -> tuple[int, bytes, str]:
+    try:
+        response = curl_requests.get(url, impersonate=IMPERSONATE, timeout=TIMEOUT)
+    except Exception as exc:
+        raise FetchError(f"Не удалось загрузить {url}: {exc}") from exc
+    return response.status_code, response.content, response.headers.get("content-type", "")
+
+
+async def fetch_bytes(url: str) -> tuple[bytes, str]:
+    """Скачивает двоичный файл (картинку). Возвращает содержимое и тип."""
+    last_status = 0
+
+    for attempt in range(MAX_ATTEMPTS):
+        status, content, content_type = await asyncio.to_thread(_fetch_bytes_sync, url)
+
+        if status == 200:
+            return content, content_type
+
+        last_status = status
+        if status not in RETRY_STATUSES or attempt == MAX_ATTEMPTS - 1:
+            break
+
+        await asyncio.sleep(BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS) - 1)])
+
+    raise FetchError(f"{url} вернул HTTP {last_status}")
+
+
 def extract_text(html: str) -> str | None:
     """Достаёт из HTML основной текст статьи без меню, футеров и комментариев."""
     return trafilatura.extract(

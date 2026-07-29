@@ -169,6 +169,8 @@ async function toggleImage(image: ArticleImage) {
 }
 
 async function copyImageLinks() {
+  // Копируем исходные адреса — они пригодятся при ручной публикации.
+  // Локальные копии остаются у нас на случай, если источник их удалит.
   const links = selectedImages.value.map((i) => i.url).join('\n')
   try {
     await navigator.clipboard.writeText(links)
@@ -324,7 +326,14 @@ onMounted(async () => {
                   :aria-pressed="image.is_selected"
                   @click="toggleImage(image)"
                 >
-                  <img class="gallery-thumb" :src="image.url" :alt="image.caption_ru || ''" loading="lazy" />
+                  <!-- Файл берём у себя, а не по прямой ссылке: источник
+                       закрыт Cloudflare и отдаёт 403 в том числе на картинки -->
+                  <img
+                    class="gallery-thumb"
+                    :src="`/api/articles/${articleId}/images/${image.id}/raw`"
+                    :alt="image.caption_ru || image.caption || ''"
+                    loading="lazy"
+                  />
                   <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">✓</span>
                   <span class="gallery-caption">
                     {{ image.caption_ru || image.caption || 'Без подписи' }}

@@ -4,12 +4,15 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.ai.client import AIError, rewrite, translate_captions
 from app.deps import CurrentUser, DbDep, write_audit
 from app.models import Article, ArticleImage, ContentQuality, Post, PostStatus, Source
+from app.parsers.fetch import FetchError
+from app.parsers.imagecache import ensure_cached
 from app.schemas import ArticleDetail, ArticleListItem, ImageOut, ImageUpdate, Message, PostOut, PostUpdate
 
 log = logging.getLogger(__name__)
@@ -231,6 +234,34 @@ async def unpublish_post(article_id: int, request: Request, db: DbDep, user: Cur
     await db.commit()
     await db.refresh(post)
     return post
+
+
+@router.get("/{article_id}/images/{image_id}/raw")
+async def get_image_file(article_id: int, image_id: int, db: DbDep, user: CurrentUser):
+    """Отдаёт саму картинку.
+
+    Напрямую к источнику браузер обратиться не может: iskconnews.org закрыт
+    Cloudflare и отдаёт 403 в том числе на файлы изображений. Поэтому качаем
+    их сами и раздаём из локального кэша.
+    """
+    image = await db.scalar(
+        select(ArticleImage).where(
+            ArticleImage.id == image_id, ArticleImage.article_id == article_id
+        )
+    )
+    if image is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Картинка не найдена")
+
+    try:
+        path, media_type = await ensure_cached(image.url)
+    except FetchError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Источник не отдал файл: {exc}") from exc
+
+    return FileResponse(
+        path,
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
 
 
 @router.patch("/{article_id}/images/{image_id}", response_model=ImageOut)
