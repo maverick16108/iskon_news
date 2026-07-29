@@ -107,6 +107,22 @@ class PostUpdate(BaseModel):
     signature: str | None = Field(default=None, max_length=255)
 
 
+class ImageOut(ORMModel):
+    id: int
+    url: str
+    caption: str | None
+    caption_ru: str | None
+    width: int | None
+    height: int | None
+    position: int
+    is_selected: bool
+
+
+class ImageUpdate(BaseModel):
+    is_selected: bool | None = None
+    caption_ru: str | None = Field(default=None, max_length=300)
+
+
 class ArticleOut(ORMModel):
     id: int
     source_id: int
@@ -124,12 +140,45 @@ class ArticleOut(ORMModel):
 class ArticleDetail(ArticleOut):
     content: str | None
     post: PostOut | None
+    images: list[ImageOut]
 
 
 class ArticleListItem(ArticleOut):
     source_name: str
     post_status: PostStatus | None
     post_char_count: int | None
+    image_count: int
+
+
+# --- Настройки языковой модели --------------------------------------------
+
+class LlmSettingsOut(BaseModel):
+    base_url: str
+    model: str
+    temperature: float
+    # Сам ключ наружу не отдаём никогда — только признак и последние символы
+    api_key_set: bool
+    api_key_hint: str | None
+    updated_at: datetime
+    updated_by: str | None
+
+
+class LlmSettingsUpdate(BaseModel):
+    base_url: str | None = Field(default=None, min_length=5, max_length=512)
+    api_key: str | None = Field(default=None, max_length=512)
+    model: str | None = Field(default=None, min_length=1, max_length=128)
+    temperature: float | None = Field(default=None, ge=0, le=2)
+
+
+class LlmTestResult(BaseModel):
+    ok: bool
+    message: str
+    model: str | None = None
+    elapsed_ms: int | None = None
+
+
+class ModelList(BaseModel):
+    models: list[str]
 
 
 # --- Журнал ---------------------------------------------------------------
@@ -153,6 +202,7 @@ class FetchResult(BaseModel):
     entries: int
     added: int
     with_full_text: int
+    images: int = 0
 
 
 class Message(BaseModel):

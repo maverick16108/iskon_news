@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
-import { api, type FetchResult, type Source, type SourceKind } from '@/api'
+import { api, type FetchResult, type Source } from '@/api'
+import TableSkeleton from '@/components/TableSkeleton.vue'
+import UiSelect from '@/components/UiSelect.vue'
+import type { SelectOption } from '@/components/select'
 import { formatDate } from '@/labels'
 import { useAuthStore } from '@/stores/auth'
 
@@ -14,14 +17,71 @@ const error = ref('')
 const notice = ref('')
 const showForm = ref(false)
 
+type SortKey = 'name' | 'url' | 'signature' | 'fetched' | 'state'
+const sortKey = ref<SortKey>('name')
+const sortAsc = ref(true)
+
+const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: 'Название' },
+  { key: 'url', label: 'Адрес' },
+  { key: 'signature', label: 'Подпись' },
+  { key: 'fetched', label: 'Последний сбор' },
+  { key: 'state', label: 'Состояние' },
+]
+
+const SUFFIX_OPTIONS: SelectOption[] = [
+  { value: 'website', label: 'website' },
+  { value: 'facebook page', label: 'facebook page' },
+  { value: 'telegram channel', label: 'telegram channel' },
+]
+
 const form = reactive({
   name: '',
   url: '',
-  kind: 'rss' as SourceKind,
+  kind: 'rss' as const,
   signature_name: '',
   signature_suffix: 'website',
   fetch_interval_minutes: 60,
 })
+
+function sortValue(source: Source, key: SortKey): string | number {
+  switch (key) {
+    case 'name':
+      return source.name.toLowerCase()
+    case 'url':
+      return source.url.toLowerCase()
+    case 'signature':
+      return (source.signature_name || source.name).toLowerCase()
+    case 'fetched':
+      return source.last_fetched_at ? Date.parse(source.last_fetched_at) : 0
+    case 'state':
+      return source.is_active ? 1 : 0
+  }
+}
+
+const sorted = computed(() => {
+  const factor = sortAsc.value ? 1 : -1
+  return [...sources.value].sort((a, b) => {
+    const left = sortValue(a, sortKey.value)
+    const right = sortValue(b, sortKey.value)
+    if (left === right) return 0
+    if (typeof left === 'number' && typeof right === 'number') return (left - right) * factor
+    return String(left).localeCompare(String(right), 'ru') * factor
+  })
+})
+
+function toggleSort(key: SortKey) {
+  if (sortKey.value === key) sortAsc.value = !sortAsc.value
+  else {
+    sortKey.value = key
+    sortAsc.value = key !== 'fetched'
+  }
+}
+
+function ariaSort(key: SortKey) {
+  if (sortKey.value !== key) return 'none'
+  return sortAsc.value ? 'ascending' : 'descending'
+}
 
 async function load() {
   loading.value = true
@@ -46,7 +106,6 @@ async function create() {
     Object.assign(form, {
       name: '',
       url: '',
-      kind: 'rss',
       signature_name: '',
       signature_suffix: 'website',
       fetch_interval_minutes: 60,
@@ -97,7 +156,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="workspace-body" style="padding: 20px">
+  <div>
     <div class="ws-control-bar">
       <span class="muted" style="font-size: 13px">Всего источников: {{ sources.length }}</span>
       <span class="row-end">
@@ -134,22 +193,21 @@ onMounted(load)
           <label class="ws-field-label">
             Подпись в посте — как источник называется в последней строке
           </label>
-          <div class="row">
-            <input
-              v-model="form.signature_name"
-              class="ws-input"
-              style="flex: 1"
-              placeholder="ISKCON News"
-            />
-            <select v-model="form.signature_suffix" class="ws-select">
-              <option value="website">website</option>
-              <option value="facebook page">facebook page</option>
-              <option value="telegram channel">telegram channel</option>
-            </select>
+          <div>
+            <div class="row">
+              <input
+                v-model="form.signature_name"
+                class="ws-input"
+                style="flex: 1"
+                placeholder="ISKCON News"
+              />
+              <UiSelect v-model="form.signature_suffix" :options="SUFFIX_OPTIONS" auto />
+            </div>
+            <small class="muted">
+              Получится: «{{ form.signature_name || form.name || '…' }}»
+              {{ form.signature_suffix }}
+            </small>
           </div>
-          <small class="muted">
-            Получится: «{{ form.signature_name || form.name || '…' }}» {{ form.signature_suffix }}
-          </small>
         </div>
         <div class="ws-field">
           <label class="ws-field-label">Как часто проверять, минут</label>
@@ -170,23 +228,34 @@ onMounted(load)
     <section class="ws-surface">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Источники</h2></div>
 
-      <div v-if="loading" class="spinner-line">Загружаем…</div>
+      <TableSkeleton v-if="loading" :columns="[20, 30, 20, 18, 12, 10]" :rows="4" />
       <div v-else-if="!sources.length" class="empty-state">Источники ещё не добавлены.</div>
 
       <div v-else class="table-wrap">
         <table class="ws-table">
           <thead>
             <tr>
-              <th>Название</th>
-              <th>Адрес</th>
-              <th>Подпись</th>
-              <th>Последний сбор</th>
-              <th>Состояние</th>
+              <th
+                v-for="column in COLUMNS"
+                :key="column.key"
+                class="sortable"
+                :class="{ 'is-sorted': sortKey === column.key }"
+                :aria-sort="ariaSort(column.key)"
+                tabindex="0"
+                @click="toggleSort(column.key)"
+                @keydown.enter.prevent="toggleSort(column.key)"
+                @keydown.space.prevent="toggleSort(column.key)"
+              >
+                {{ column.label }}
+                <span class="sort-marker">{{
+                  sortKey === column.key ? (sortAsc ? '▲' : '▼') : '▲'
+                }}</span>
+              </th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="source in sources" :key="source.id">
+            <tr v-for="source in sorted" :key="source.id">
               <td>{{ source.name }}</td>
               <td class="mono" style="font-size: 12px">{{ source.url }}</td>
               <td>«{{ source.signature_name || source.name }}» {{ source.signature_suffix }}</td>

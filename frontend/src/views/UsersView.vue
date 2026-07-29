@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
 import { api, type Role, type User } from '@/api'
+import TableSkeleton from '@/components/TableSkeleton.vue'
+import UiSelect from '@/components/UiSelect.vue'
+import type { SelectOption } from '@/components/select'
 import { ROLE_LABELS, formatDate } from '@/labels'
 import { useAuthStore } from '@/stores/auth'
 
@@ -13,6 +16,28 @@ const error = ref('')
 const notice = ref('')
 const showForm = ref(false)
 
+type SortKey = 'username' | 'full_name' | 'role' | 'created' | 'login' | 'state'
+const sortKey = ref<SortKey>('created')
+const sortAsc = ref(false)
+
+const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'username', label: 'Логин' },
+  { key: 'full_name', label: 'Имя' },
+  { key: 'role', label: 'Роль' },
+  { key: 'created', label: 'Создан' },
+  { key: 'login', label: 'Последний вход' },
+  { key: 'state', label: 'Состояние' },
+]
+
+const ROLE_OPTIONS: SelectOption[] = [
+  { value: 'editor', label: ROLE_LABELS.editor, hint: 'Работа с новостями' },
+  {
+    value: 'superadmin',
+    label: ROLE_LABELS.superadmin,
+    hint: 'Плюс пользователи и источники',
+  },
+]
+
 const form = reactive({
   username: '',
   password: '',
@@ -20,9 +45,49 @@ const form = reactive({
   role: 'editor' as Role,
 })
 
-// Смена пароля существующему пользователю
 const resetFor = ref<User | null>(null)
 const newPassword = ref('')
+
+function sortValue(user: User, key: SortKey): string | number {
+  switch (key) {
+    case 'username':
+      return user.username.toLowerCase()
+    case 'full_name':
+      return (user.full_name ?? '').toLowerCase()
+    case 'role':
+      return user.role
+    case 'created':
+      return Date.parse(user.created_at)
+    case 'login':
+      return user.last_login_at ? Date.parse(user.last_login_at) : 0
+    case 'state':
+      return user.is_active ? 1 : 0
+  }
+}
+
+const sorted = computed(() => {
+  const factor = sortAsc.value ? 1 : -1
+  return [...users.value].sort((a, b) => {
+    const left = sortValue(a, sortKey.value)
+    const right = sortValue(b, sortKey.value)
+    if (left === right) return 0
+    if (typeof left === 'number' && typeof right === 'number') return (left - right) * factor
+    return String(left).localeCompare(String(right), 'ru') * factor
+  })
+})
+
+function toggleSort(key: SortKey) {
+  if (sortKey.value === key) sortAsc.value = !sortAsc.value
+  else {
+    sortKey.value = key
+    sortAsc.value = !['created', 'login'].includes(key)
+  }
+}
+
+function ariaSort(key: SortKey) {
+  if (sortKey.value !== key) return 'none'
+  return sortAsc.value ? 'ascending' : 'descending'
+}
 
 async function load() {
   loading.value = true
@@ -64,7 +129,7 @@ async function toggleActive(user: User) {
   }
 }
 
-async function changeRole(user: User, role: Role) {
+async function changeRole(user: User, role: string | number) {
   error.value = ''
   try {
     await api.patch<User>(`/api/users/${user.id}`, { role })
@@ -105,7 +170,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="workspace-body" style="padding: 20px">
+  <div>
     <div class="ws-control-bar">
       <span class="muted" style="font-size: 13px">Всего учётных записей: {{ users.length }}</span>
       <span class="row-end">
@@ -149,12 +214,7 @@ onMounted(load)
         </div>
         <div class="ws-field">
           <label class="ws-field-label">Роль</label>
-          <select v-model="form.role" class="ws-select">
-            <option value="editor">Редактор — работа с новостями</option>
-            <option value="superadmin">
-              Суперадминистратор — плюс пользователи и источники
-            </option>
-          </select>
+          <UiSelect v-model="form.role" :options="ROLE_OPTIONS" />
         </div>
         <div class="row">
           <button class="ws-btn ws-btn-primary" type="submit">Создать</button>
@@ -184,38 +244,46 @@ onMounted(load)
     <section class="ws-surface">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Пользователи</h2></div>
 
-      <div v-if="loading" class="spinner-line">Загружаем…</div>
+      <TableSkeleton v-if="loading" :columns="[15, 18, 20, 15, 15, 10, 12]" :rows="4" />
 
       <div v-else class="table-wrap">
         <table class="ws-table">
           <thead>
             <tr>
-              <th>Логин</th>
-              <th>Имя</th>
-              <th>Роль</th>
-              <th>Создан</th>
-              <th>Последний вход</th>
-              <th>Состояние</th>
+              <th
+                v-for="column in COLUMNS"
+                :key="column.key"
+                class="sortable"
+                :class="{ 'is-sorted': sortKey === column.key }"
+                :aria-sort="ariaSort(column.key)"
+                tabindex="0"
+                @click="toggleSort(column.key)"
+                @keydown.enter.prevent="toggleSort(column.key)"
+                @keydown.space.prevent="toggleSort(column.key)"
+              >
+                {{ column.label }}
+                <span class="sort-marker">{{
+                  sortKey === column.key ? (sortAsc ? '▲' : '▼') : '▲'
+                }}</span>
+              </th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="user in users" :key="user.id">
+            <tr v-for="user in sorted" :key="user.id">
               <td>
                 <b>{{ user.username }}</b>
                 <span v-if="user.id === auth.user?.id" class="muted"> — это вы</span>
               </td>
               <td>{{ user.full_name || '—' }}</td>
               <td>
-                <select
-                  class="ws-select ws-control-sm"
-                  :value="user.role"
+                <UiSelect
+                  :model-value="user.role"
+                  :options="ROLE_OPTIONS"
                   :disabled="user.id === auth.user?.id"
-                  @change="changeRole(user, ($event.target as HTMLSelectElement).value as Role)"
-                >
-                  <option value="editor">{{ ROLE_LABELS.editor }}</option>
-                  <option value="superadmin">{{ ROLE_LABELS.superadmin }}</option>
-                </select>
+                  small
+                  @update:model-value="changeRole(user, $event)"
+                />
               </td>
               <td>{{ formatDate(user.created_at) }}</td>
               <td>{{ formatDate(user.last_login_at) }}</td>

@@ -1,51 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
+import ProfileMenu from '@/components/ProfileMenu.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const route = useRoute()
-const router = useRouter()
 const navOpen = ref(false)
 
-// Тема UIUIDS умеет светлую и тёмную схему через html[data-theme]
-const dark = ref(false)
-
-function applyTheme() {
-  document.documentElement.dataset.theme = dark.value ? 'dark' : 'light'
-  localStorage.setItem('iskcon-theme', dark.value ? 'dark' : 'light')
-}
-
-function toggleTheme() {
-  dark.value = !dark.value
-  applyTheme()
-}
-
-onMounted(() => {
-  dark.value = localStorage.getItem('iskcon-theme') === 'dark'
-  applyTheme()
-})
-
 const title = computed(() => (route.meta.title as string) ?? 'Новости ИСККОН')
-
-const initials = computed(() => {
-  const source = auth.user?.full_name || auth.user?.username || '?'
-  return source
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-})
-
-const roleLabel = computed(() =>
-  auth.user?.role === 'superadmin' ? 'Суперадминистратор' : 'Редактор',
-)
-
-async function onLogout() {
-  await auth.logout()
-  router.push({ name: 'login' })
-}
 </script>
 
 <template>
@@ -77,27 +41,16 @@ async function onLogout() {
           <RouterLink class="ui-nav-link" :to="{ name: 'users' }" @click="navOpen = false">
             <span>Пользователи</span>
           </RouterLink>
+          <RouterLink class="ui-nav-link" :to="{ name: 'llm-settings' }" @click="navOpen = false">
+            <span>Настройки модели</span>
+          </RouterLink>
           <RouterLink class="ui-nav-link" :to="{ name: 'audit' }" @click="navOpen = false">
             <span>Журнал действий</span>
           </RouterLink>
         </nav>
       </section>
 
-      <button class="ui-theme-toggle" type="button" :aria-pressed="dark" @click="toggleTheme">
-        <span class="ui-theme-icon" aria-hidden="true">◐</span>
-        <span>{{ dark ? 'Светлая тема' : 'Тёмная тема' }}</span>
-      </button>
-
-      <div class="ui-profile">
-        <span class="ui-avatar">{{ initials }}</span>
-        <span class="ui-profile-copy">
-          <b>{{ auth.user?.full_name || auth.user?.username }}</b>
-          <small>{{ roleLabel }}</small>
-        </span>
-        <button type="button" aria-label="Выйти из системы" title="Выйти" @click="onLogout">
-          ⏻
-        </button>
-      </div>
+      <ProfileMenu />
     </aside>
 
     <main class="ui-main">

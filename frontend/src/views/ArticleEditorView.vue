@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { MAX_POST_CHARS, api, type ArticleDetail, type Post } from '@/api'
+import { MAX_POST_CHARS, api, type ArticleDetail, type ArticleImage, type Post } from '@/api'
 import { POST_STATUS_LABELS, POST_STATUS_TONE, QUALITY_LABELS, QUALITY_TONE, formatDate } from '@/labels'
 
 const route = useRoute()
@@ -152,6 +152,32 @@ function isActiveTag(tag: string) {
   return draft.value.hashtags.split(/\s+/).includes(tag)
 }
 
+const selectedImages = computed(() => article.value?.images.filter((i) => i.is_selected) ?? [])
+
+async function toggleImage(image: ArticleImage) {
+  // Отмечаем сразу, не дожидаясь сервера — щелчок должен быть мгновенным
+  const previous = image.is_selected
+  image.is_selected = !previous
+  try {
+    await api.patch<ArticleImage>(`/api/articles/${articleId}/images/${image.id}`, {
+      is_selected: image.is_selected,
+    })
+  } catch (e) {
+    image.is_selected = previous
+    error.value = e instanceof Error ? e.message : 'Не удалось изменить выбор фото'
+  }
+}
+
+async function copyImageLinks() {
+  const links = selectedImages.value.map((i) => i.url).join('\n')
+  try {
+    await navigator.clipboard.writeText(links)
+    notice.value = `Ссылок скопировано: ${selectedImages.value.length}`
+  } catch {
+    error.value = 'Браузер не дал доступ к буферу обмена'
+  }
+}
+
 onMounted(async () => {
   try {
     allowedTags.value = await api.get<string[]>('/api/hashtags')
@@ -163,8 +189,28 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="workspace-body" style="padding: 20px">
-    <div v-if="loading" class="spinner-line">Загружаем…</div>
+  <div>
+    <div v-if="loading" class="editor-grid" aria-busy="true">
+      <section class="ws-surface">
+        <div class="ws-surface-head"><h2 class="ws-surface-title">Исходная статья</h2></div>
+        <div class="ws-surface-body stack">
+          <span class="skeleton skeleton-text" style="width: 70%; height: 18px" />
+          <span class="skeleton skeleton-text" style="width: 40%" />
+          <span class="skeleton skeleton-block" style="height: 320px" />
+        </div>
+      </section>
+      <section class="ws-surface">
+        <div class="ws-surface-head"><h2 class="ws-surface-title">Пост для канала</h2></div>
+        <div class="ws-surface-body stack">
+          <span class="skeleton skeleton-text" style="width: 30%" />
+          <span class="skeleton skeleton-block" style="height: 70px" />
+          <span class="skeleton skeleton-text" style="width: 30%" />
+          <span class="skeleton skeleton-block" style="height: 34px" />
+          <span class="skeleton skeleton-text" style="width: 30%" />
+          <span class="skeleton skeleton-block" style="height: 200px" />
+        </div>
+      </section>
+    </div>
 
     <template v-else-if="article">
       <div class="ws-control-bar">
@@ -263,6 +309,35 @@ onMounted(async () => {
               <input v-model="draft.signature" class="ws-input" placeholder="«ISKCON News» website" />
             </div>
 
+            <div v-if="article.images.length" class="ws-field">
+              <label class="ws-field-label">
+                Фотографии из новости — отметьте те, что пойдут в пост
+                <span class="muted"> ({{ selectedImages.length }} из {{ article.images.length }})</span>
+              </label>
+              <div class="gallery">
+                <button
+                  v-for="image in article.images"
+                  :key="image.id"
+                  type="button"
+                  class="gallery-item"
+                  :class="{ 'is-selected': image.is_selected }"
+                  :aria-pressed="image.is_selected"
+                  @click="toggleImage(image)"
+                >
+                  <img class="gallery-thumb" :src="image.url" :alt="image.caption_ru || ''" loading="lazy" />
+                  <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">✓</span>
+                  <span class="gallery-caption">
+                    {{ image.caption_ru || image.caption || 'Без подписи' }}
+                    <span
+                      v-if="image.caption_ru && image.caption"
+                      class="gallery-caption-original"
+                      >{{ image.caption }}</span
+                    >
+                  </span>
+                </button>
+              </div>
+            </div>
+
             <div class="ws-field">
               <label class="ws-field-label">Предпросмотр</label>
               <div class="post-preview">{{ rendered }}</div>
@@ -275,7 +350,14 @@ onMounted(async () => {
             <div class="row">
               <button class="ws-btn" :disabled="saving || !post" @click="save">Сохранить</button>
               <button class="ws-btn ws-btn-quiet" :disabled="!post" @click="copyPost">
-                Скопировать
+                Скопировать текст
+              </button>
+              <button
+                class="ws-btn ws-btn-quiet"
+                :disabled="!selectedImages.length"
+                @click="copyImageLinks"
+              >
+                Ссылки на фото ({{ selectedImages.length }})
               </button>
               <span class="row-end row">
                 <button

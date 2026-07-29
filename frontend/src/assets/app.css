@@ -9,6 +9,58 @@ body {
   min-height: 100vh;
 }
 
+/* --- Размер шрифта и масштаб интерфейса ----------------------------------
+   Тема задаёт размеры в пикселях, поэтому масштабировать текст через
+   font-size у html бесполезно. Зато почти вся типографика сидит на пяти
+   токенах — их и множим. Остальное дописано ниже поимённо. */
+
+:root {
+  --font-scale: 1;
+  --ui-scale: 1;
+}
+
+.workspace-body,
+.login-screen {
+  --ui-body: calc(12px * var(--font-scale));
+  --ui-meta: calc(11px * var(--font-scale));
+  --ui-micro: calc(10px * var(--font-scale));
+  --ui-section-title: calc(14px * var(--font-scale));
+  --ui-page-title: calc(24px * var(--font-scale));
+}
+
+/* Размеры, зашитые в тему мимо токенов */
+.workspace-body .ws-table th {
+  font-size: calc(10px * var(--font-scale));
+}
+
+.workspace-body .ws-table td,
+.workspace-body .ws-input,
+.workspace-body .ws-select,
+.workspace-body .ui-select,
+.workspace-body .ws-btn,
+.workspace-body .ui-nav-link,
+.workspace-body .ws-field-label,
+.workspace-body .ui-brand-copy,
+.login-card .ws-input,
+.login-card .ws-btn,
+.login-card .ws-field-label {
+  font-size: calc(12px * var(--font-scale));
+}
+
+.workspace-body .ws-surface-title {
+  font-size: calc(14px * var(--font-scale));
+}
+
+.workspace-body .ws-badge {
+  font-size: calc(11px * var(--font-scale));
+}
+
+/* Масштаб всего интерфейса. zoom, а не transform: scale — он не ломает
+   раскладку и корректно влияет на прокрутку и позиционирование. */
+.ui-shell {
+  zoom: var(--ui-scale);
+}
+
 /* --- Экран входа --------------------------------------------------------- */
 
 .login-screen {
@@ -205,6 +257,87 @@ textarea.ws-input {
   font-family: inherit;
 }
 
+/* --- Галерея картинок статьи --------------------------------------------- */
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.gallery-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 2px solid var(--scheme-border, #e3e9f0);
+  border-radius: 9px;
+  background: var(--scheme-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--motion, 160ms) ease;
+}
+
+.gallery-item:hover {
+  border-color: var(--scheme-border-strong, #c7d1dd);
+}
+
+.gallery-item.is-selected {
+  border-color: #1768ff;
+  background: var(--scheme-surface-selected, #f2f7ff);
+}
+
+.gallery-item:focus-visible {
+  outline: 3px solid rgba(23, 104, 255, 0.2);
+  outline-offset: 1px;
+}
+
+.gallery-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #eef2f7;
+  display: block;
+}
+
+.gallery-caption {
+  font-size: calc(11px * var(--font-scale));
+  line-height: 1.35;
+  color: var(--scheme-text, #35414f);
+}
+
+.gallery-caption-original {
+  display: block;
+  margin-top: 3px;
+  font-size: calc(10px * var(--font-scale));
+  color: #8b98a9;
+}
+
+.gallery-mark {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #1768ff;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(16, 35, 63, 0.35);
+}
+
+.gallery-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #7b899b;
+}
+
 /* --- Таблицы ------------------------------------------------------------- */
 
 .table-wrap {
@@ -224,6 +357,19 @@ textarea.ws-input {
   text-decoration: underline;
 }
 
+/* Поиск — главный элемент панели, поэтому занимает всё свободное место */
+.search-input.ws-input {
+  flex: 1;
+  min-width: 260px;
+}
+
+.photo-count {
+  margin-left: 8px;
+  font-size: calc(10px * var(--font-scale));
+  color: #7b899b;
+  white-space: nowrap;
+}
+
 .badge-dot {
   display: inline-block;
   width: 7px;
@@ -240,9 +386,370 @@ textarea.ws-input {
   font-size: 14px;
 }
 
-.spinner-line {
-  padding: 24px;
-  text-align: center;
-  color: #6b7785;
-  font-size: 13px;
+/* --- Сортируемые заголовки таблиц ---------------------------------------- */
+
+.ws-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ws-table th.sortable:hover {
+  color: #1768ff;
+}
+
+.ws-table th.sortable:focus-visible {
+  outline: 3px solid rgba(23, 104, 255, 0.2);
+  outline-offset: -2px;
+}
+
+.sort-marker {
+  display: inline-block;
+  width: 12px;
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.35;
+}
+
+.ws-table th.is-sorted .sort-marker {
+  opacity: 1;
+  color: #1768ff;
+}
+
+/* --- Скелетоны ----------------------------------------------------------- */
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -320px 0;
+  }
+  100% {
+    background-position: 320px 0;
+  }
+}
+
+.skeleton {
+  display: block;
+  border-radius: 6px;
+  background: #e9eef4;
+  background-image: linear-gradient(90deg, #e9eef4 0%, #f4f7fa 50%, #e9eef4 100%);
+  background-size: 320px 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+:root[data-theme='dark'] .skeleton {
+  background: #3a3d49;
+  background-image: linear-gradient(90deg, #3a3d49 0%, #454956 50%, #3a3d49 100%);
+}
+
+.skeleton-text {
+  height: 12px;
+}
+
+.skeleton-badge {
+  height: 20px;
+  width: 92px;
+  border-radius: 999px;
+}
+
+.skeleton-block {
+  height: 100px;
+}
+
+/* --- Меню профиля -------------------------------------------------------- */
+
+.profile-menu {
+  position: relative;
+  margin-top: auto;
+}
+
+.profile-trigger {
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  background: none;
+  border: 0;
+}
+
+.profile-caret {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.profile-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 10px;
+  background: var(--scheme-surface-raised, #fff);
+  box-shadow: 0 16px 40px rgba(16, 35, 63, 0.18);
+}
+
+.profile-panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px 10px;
+  border-bottom: 1px solid var(--scheme-border-soft, #e8edf2);
+  margin-bottom: 6px;
+}
+
+.profile-panel-head b {
+  font-size: calc(12px * var(--font-scale));
+  color: var(--scheme-text, #18304e);
+}
+
+.profile-panel-head small {
+  font-size: calc(10px * var(--font-scale));
+  color: #7b899b;
+}
+
+.profile-section {
+  padding: 6px 8px;
+}
+
+.profile-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: calc(10px * var(--font-scale));
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #7b899b;
+  margin-bottom: 7px;
+}
+
+.profile-value {
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #1768ff;
+}
+
+.profile-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.profile-switch button {
+  padding: 6px 8px;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 6px;
+  background: var(--scheme-surface, #fff);
+  color: var(--scheme-text, #18304e);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.profile-switch button.is-active {
+  border-color: #1768ff;
+  background: var(--scheme-surface-selected, #eaf2ff);
+  color: #1768ff;
+}
+
+.profile-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-stepper button {
+  flex: none;
+  min-width: 34px;
+  padding: 5px 8px;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 6px;
+  background: var(--scheme-surface, #fff);
+  color: var(--scheme-text, #18304e);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-stepper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.profile-bar {
+  display: flex;
+  flex: 1;
+  gap: 3px;
+}
+
+.profile-bar i {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--scheme-border, #dce3eb);
+}
+
+.profile-bar i.is-on {
+  background: #1768ff;
+}
+
+.profile-item {
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--scheme-text, #18304e);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-item:hover:not(:disabled) {
+  background: var(--scheme-surface-hover, #f1f6fd);
+}
+
+.profile-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.profile-item.is-danger {
+  color: #c0392b;
+}
+
+/* --- Свой выпадающий список ---------------------------------------------- */
+/* Нативный select рисуется средствами системы и в тему не попадает —
+   на macOS он выпадает тёмной панелью. Поэтому свой. */
+
+.ui-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--scheme-border, #d7dfe9);
+  border-radius: 7px;
+  background: var(--scheme-surface, #fff);
+  color: var(--scheme-text, #18304e);
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ui-select.is-small {
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.ui-select.is-auto {
+  width: auto;
+}
+
+.ui-select:hover:not(.is-disabled) {
+  border-color: var(--scheme-border-strong, #c7d1dd);
+}
+
+.ui-select:focus-visible,
+.ui-select.is-open {
+  outline: 3px solid rgba(23, 104, 255, 0.2);
+  outline-offset: 1px;
+  border-color: #1768ff;
+}
+
+.ui-select.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ui-select-value {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-value.is-placeholder {
+  color: #91a0b4;
+  font-weight: 500;
+}
+
+.ui-select-caret {
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: transform var(--motion, 160ms) ease;
+}
+
+.ui-select.is-open .ui-select-caret {
+  transform: rotate(180deg);
+}
+
+.ui-select-list {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 9px;
+  background: var(--scheme-surface-raised, #fff);
+  box-shadow: 0 12px 32px rgba(16, 35, 63, 0.16);
+}
+
+.ui-select-option {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--scheme-text, #18304e);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ui-select-option.is-active {
+  background: var(--scheme-surface-hover, #f1f6fd);
+}
+
+.ui-select-option.is-selected {
+  color: #1768ff;
+}
+
+.ui-select-option.is-selected.is-active {
+  background: var(--scheme-surface-selected, #eaf2ff);
+}
+
+.ui-select-check {
+  flex: none;
+  width: 12px;
+  font-size: 11px;
+  color: #1768ff;
+}
+
+.ui-select-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #7b899b;
+  white-space: normal;
 }

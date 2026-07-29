@@ -1,16 +1,18 @@
 """Статьи и переработанные из них посты."""
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.ai.client import AIError, rewrite
+from app.ai.client import AIError, rewrite, translate_captions
 from app.deps import CurrentUser, DbDep, write_audit
-from app.models import Article, ContentQuality, Post, PostStatus, Source
-from app.schemas import ArticleDetail, ArticleListItem, Message, PostOut, PostUpdate
+from app.models import Article, ArticleImage, ContentQuality, Post, PostStatus, Source
+from app.schemas import ArticleDetail, ArticleListItem, ImageOut, ImageUpdate, Message, PostOut, PostUpdate
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/articles", tags=["articles"])
 
 
@@ -28,7 +30,7 @@ async def list_articles(
     query = (
         select(Article, Source.name)
         .join(Source, Source.id == Article.source_id)
-        .options(selectinload(Article.post))
+        .options(selectinload(Article.post), selectinload(Article.images))
         .order_by(Article.published_at.desc().nullslast(), Article.id.desc())
     )
 
@@ -49,6 +51,7 @@ async def list_articles(
             source_name=source_name,
             post_status=article.post.status if article.post else None,
             post_char_count=article.post.char_count if article.post else None,
+            image_count=len(article.images),
         )
         for article, source_name in rows
     ]
@@ -57,7 +60,9 @@ async def list_articles(
 @router.get("/{article_id}", response_model=ArticleDetail)
 async def get_article(article_id: int, db: DbDep, user: CurrentUser):
     article = await db.scalar(
-        select(Article).where(Article.id == article_id).options(selectinload(Article.post))
+        select(Article)
+        .where(Article.id == article_id)
+        .options(selectinload(Article.post), selectinload(Article.images))
     )
     if article is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Статья не найдена")
@@ -70,7 +75,11 @@ async def rewrite_article(article_id: int, request: Request, db: DbDep, user: Cu
     article = await db.scalar(
         select(Article)
         .where(Article.id == article_id)
-        .options(selectinload(Article.post), selectinload(Article.source))
+        .options(
+            selectinload(Article.post),
+            selectinload(Article.source),
+            selectinload(Article.images),
+        )
     )
     if article is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Статья не найдена")
@@ -106,13 +115,29 @@ async def rewrite_article(article_id: int, request: Request, db: DbDep, user: Cu
     post.ai_error = None
     post.status = PostStatus.generated
 
+    # Подписи к фотографиям переводим тем же проходом. Если перевод не
+    # удался — пост всё равно сохраняем, подписи останутся на английском.
+    pending = [image for image in article.images if image.caption and not image.caption_ru]
+    if pending:
+        try:
+            for image, translated in zip(
+                pending, await translate_captions([i.caption or "" for i in pending])
+            ):
+                image.caption_ru = translated
+        except AIError as exc:
+            log.warning("Подписи к фото не переведены: %s", exc)
+
     await write_audit(
         db,
         user=user,
         action="post.generate",
         entity_type="article",
         entity_id=article.id,
-        details={"model": draft.model, "chars": draft.char_count},
+        details={
+            "model": draft.model,
+            "chars": draft.char_count,
+            "captions": len(pending),
+        },
         request=request,
     )
     await db.commit()
@@ -206,6 +231,42 @@ async def unpublish_post(article_id: int, request: Request, db: DbDep, user: Cur
     await db.commit()
     await db.refresh(post)
     return post
+
+
+@router.patch("/{article_id}/images/{image_id}", response_model=ImageOut)
+async def update_image(
+    article_id: int,
+    image_id: int,
+    payload: ImageUpdate,
+    request: Request,
+    db: DbDep,
+    user: CurrentUser,
+):
+    """Отметить картинку для поста или поправить её подпись."""
+    image = await db.scalar(
+        select(ArticleImage).where(
+            ArticleImage.id == image_id, ArticleImage.article_id == article_id
+        )
+    )
+    if image is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Картинка не найдена")
+
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(image, field, value)
+
+    await write_audit(
+        db,
+        user=user,
+        action="image.update",
+        entity_type="article",
+        entity_id=article_id,
+        details={"image_id": image_id, **{k: str(v) for k, v in changes.items()}},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(image)
+    return image
 
 
 @router.delete("/{article_id}", response_model=Message)

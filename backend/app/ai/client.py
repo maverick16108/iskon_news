@@ -8,8 +8,9 @@ from dataclasses import dataclass
 
 from openai import APIError, AsyncOpenAI, RateLimitError
 
+from app.ai.config import LlmConfig, current as current_config
 from app.ai.hashtags import sanitize_hashtags
-from app.ai.prompt import SYSTEM_PROMPT, build_user_prompt
+from app.ai.prompt import GLOSSARY, SYSTEM_PROMPT, build_user_prompt
 from app.config import settings
 from app.models import MAX_POST_CHARS, Article, ContentQuality, Source
 
@@ -46,10 +47,10 @@ class Draft:
         return len(self.rendered)
 
 
-def _client() -> AsyncOpenAI:
-    if not settings.openai_api_key:
-        raise AIError("Не задан OPENAI_API_KEY — заполните .env")
-    return AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
+def build_client(config: LlmConfig) -> AsyncOpenAI:
+    if not config.api_key:
+        raise AIError("Не задан ключ API — укажите его в настройках подключения к модели")
+    return AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
 
 def _body_budget(signature: str) -> int:
@@ -106,15 +107,16 @@ async def rewrite(article: Article, source: Source) -> Draft:
         {"role": "user", "content": user_prompt},
     ]
 
-    client = _client()
-    model = settings.openai_model
+    config = await current_config()
+    client = build_client(config)
+    model = config.model
 
     try:
         response = await client.chat.completions.create(
             model=model,
             messages=messages,  # type: ignore[arg-type]
             response_format={"type": "json_object"},
-            temperature=0.4,
+            temperature=config.temperature,
         )
     except RateLimitError as exc:
         raise AIError(f"OpenAI: превышен лимит запросов — {exc}") from exc
@@ -141,6 +143,65 @@ async def rewrite(article: Article, source: Source) -> Draft:
         draft = await _shorten(client, model, messages, raw, overflow, draft)
 
     return draft
+
+
+CAPTION_SYSTEM_PROMPT = f"""\
+Ты переводишь подписи к фотографиям для новостного телеграм-канала
+«Новости ИСККОН» на русский язык.
+
+Правила:
+— Перевод короткий, как подпись под фото: без точки в конце, до 120 символов.
+— Ничего не добавляй от себя: только то, что есть в исходной подписи.
+— Соблюдай терминологию:
+{GLOSSARY}
+
+Ответ — строгий JSON вида {{"captions": ["перевод 1", "перевод 2"]}}.
+Порядок и количество переводов должны совпадать с исходным списком.\
+"""
+
+
+async def translate_captions(captions: list[str]) -> list[str]:
+    """Переводит подписи к фотографиям.
+
+    Одним запросом на всю статью: подписи короткие, а отдельный вызов
+    на каждую — лишние деньги и время.
+    """
+    if not captions:
+        return []
+
+    numbered = "\n".join(f"{i + 1}. {text}" for i, text in enumerate(captions))
+
+    config = await current_config()
+
+    try:
+        response = await build_client(config).chat.completions.create(
+            model=config.model,
+            messages=[
+                {"role": "system", "content": CAPTION_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Переведи подписи:\n{numbered}"},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+        )
+    except APIError as exc:
+        raise AIError(f"OpenAI вернул ошибку при переводе подписей: {exc}") from exc
+
+    try:
+        data = json.loads(response.choices[0].message.content or "")
+        translated = [str(item).strip() for item in data.get("captions", [])]
+    except (json.JSONDecodeError, AttributeError, TypeError) as exc:
+        raise AIError(f"Не удалось разобрать перевод подписей: {exc}") from exc
+
+    # Если модель вернула не то количество — не сдвигаем подписи под чужие фото
+    if len(translated) != len(captions):
+        log.warning(
+            "Подписей на входе %d, в ответе %d — оставляем оригиналы",
+            len(captions),
+            len(translated),
+        )
+        return captions
+
+    return translated
 
 
 async def _shorten(

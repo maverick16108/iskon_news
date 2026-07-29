@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai.hashtags import NEWS_HASHTAGS
 from app.config import settings
-from app.routers import articles, audit, auth, sources, users
+from app.routers import articles, audit, auth, settings as settings_router, sources, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +42,7 @@ app.include_router(users.router)
 app.include_router(sources.router)
 app.include_router(articles.router)
 app.include_router(audit.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/api/health", tags=["service"])

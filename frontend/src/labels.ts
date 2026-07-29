@@ -52,6 +52,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'post.publish': 'Публикация',
   'post.unpublish': 'Снятие с публикации',
   'article.delete': 'Удалена статья',
+  'image.update': 'Изменён выбор фото',
+  'llm.update': 'Изменены настройки модели',
 }
 
 export function formatDate(value: string | null): string {

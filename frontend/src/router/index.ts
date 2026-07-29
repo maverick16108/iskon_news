@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { title: 'Пользователи', superadmin: true },
     },
     {
+      path: '/settings/llm',
+      name: 'llm-settings',
+      component: () => import('@/views/LlmSettingsView.vue'),
+      meta: { title: 'Настройки модели', superadmin: true },
+    },
+    {
       path: '/audit',
       name: 'audit',
       component: () => import('@/views/AuditView.vue'),

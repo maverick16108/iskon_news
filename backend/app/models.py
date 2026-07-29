@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -125,11 +126,42 @@ class Article(Base):
     post: Mapped[Post | None] = relationship(
         back_populates="article", cascade="all, delete-orphan", uselist=False
     )
+    images: Mapped[list[ArticleImage]] = relationship(
+        back_populates="article",
+        cascade="all, delete-orphan",
+        order_by="ArticleImage.position",
+    )
 
     @property
     def text_for_ai(self) -> str:
         """Текст, который уходит в модель: полный, а если его нет — анонс."""
         return self.content or self.summary or ""
+
+
+class ArticleImage(Base):
+    """Картинка из новости.
+
+    Подпись берём из figcaption, alt или имени файла — на iskconnews.org
+    её зашивают именно туда. Перевод подписи делает тот же модуль ИИ,
+    что и текст поста.
+    """
+
+    __tablename__ = "article_images"
+    __table_args__ = (UniqueConstraint("article_id", "url", name="uq_article_images_url"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(ForeignKey("articles.id", ondelete="CASCADE"), index=True)
+    article: Mapped[Article] = relationship(back_populates="images")
+
+    url: Mapped[str] = mapped_column(String(1024))
+    caption: Mapped[str | None] = mapped_column(Text)      # как в оригинале
+    caption_ru: Mapped[str | None] = mapped_column(Text)   # перевод
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    # Пойдёт ли картинка в пост. Первую выбираем автоматически.
+    is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 # --------------------------------------------------------------------------
@@ -198,6 +230,40 @@ class Post(Base):
     @property
     def is_within_limit(self) -> bool:
         return self.char_count <= MAX_POST_CHARS
+
+
+# --------------------------------------------------------------------------
+# Настройки подключения к языковой модели
+# --------------------------------------------------------------------------
+
+class LlmSettings(Base):
+    """Одна строка на всё приложение.
+
+    Значения из .env остаются запасным вариантом: пока в базе ничего нет,
+    работаем по ним, и приложение поднимается без предварительной настройки.
+    """
+
+    __tablename__ = "llm_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+
+    base_url: Mapped[str] = mapped_column(String(512), default="https://api.openai.com/v1")
+    api_key: Mapped[str | None] = mapped_column(String(512))
+    model: Mapped[str] = mapped_column(String(128), default="gpt-4o")
+    temperature: Mapped[float] = mapped_column(Float, default=0.4)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by: Mapped[User | None] = relationship()
+
+    @property
+    def key_hint(self) -> str | None:
+        """Хвост ключа для интерфейса — сам ключ наружу не отдаём."""
+        if not self.api_key:
+            return None
+        return f"…{self.api_key[-4:]}" if len(self.api_key) > 8 else "…"
 
 
 # --------------------------------------------------------------------------

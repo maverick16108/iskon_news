@@ -113,15 +113,28 @@ export interface Article {
   fetched_at: string
 }
 
+export interface ArticleImage {
+  id: number
+  url: string
+  caption: string | null
+  caption_ru: string | null
+  width: number | null
+  height: number | null
+  position: number
+  is_selected: boolean
+}
+
 export interface ArticleListItem extends Article {
   source_name: string
   post_status: PostStatus | null
   post_char_count: number | null
+  image_count: number
 }
 
 export interface ArticleDetail extends Article {
   content: string | null
   post: Post | null
+  images: ArticleImage[]
 }
 
 export interface AuditEntry {
@@ -141,6 +154,24 @@ export interface FetchResult {
   entries: number
   added: number
   with_full_text: number
+  images: number
+}
+
+export interface LlmSettings {
+  base_url: string
+  model: string
+  temperature: number
+  api_key_set: boolean
+  api_key_hint: string | null
+  updated_at: string
+  updated_by: string | null
+}
+
+export interface LlmTestResult {
+  ok: boolean
+  message: string
+  model: string | null
+  elapsed_ms: number | null
 }
 
 export const MAX_POST_CHARS = 1000

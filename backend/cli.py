@@ -122,6 +122,59 @@ async def fetch_all() -> int:
     return 0
 
 
+async def backfill_images(limit: int) -> int:
+    """Догружает картинки к статьям, собранным до появления этой возможности."""
+    from sqlalchemy.orm import selectinload
+
+    from app.models import Article, ArticleImage
+    from app.parsers.fetch import FetchError, fetch_html
+    from app.parsers.images import extract_images
+
+    async with SessionFactory() as db:
+        articles = list(
+            await db.scalars(
+                select(Article)
+                .options(selectinload(Article.images))
+                .order_by(Article.published_at.desc().nullslast())
+                .limit(limit)
+            )
+        )
+        todo = [a for a in articles if not a.images]
+        print(f"Статей без картинок: {len(todo)} из {len(articles)}")
+
+        total = 0
+        for index, article in enumerate(todo, 1):
+            try:
+                if index > 1:
+                    await asyncio.sleep(1.5)  # не долбим сайт подряд
+                html = await fetch_html(article.url)
+                images = extract_images(html, article.url)
+            except FetchError as exc:
+                print(f"  [{index}/{len(todo)}] {article.title[:50]}: {exc}")
+                continue
+
+            article.images = [
+                ArticleImage(
+                    url=image.url,
+                    caption=image.caption,
+                    width=image.width,
+                    height=image.height,
+                    position=position,
+                    is_selected=position == 0,
+                )
+                for position, image in enumerate(images)
+            ]
+            if images and not article.image_url:
+                article.image_url = images[0].url
+
+            total += len(images)
+            await db.commit()
+            print(f"  [{index}/{len(todo)}] {article.title[:50]}: {len(images)} шт.")
+
+        print(f"\nВсего добавлено картинок: {total}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Служебные команды проекта")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -133,6 +186,9 @@ def main() -> int:
     sub.add_parser("seed-sources", help="добавить источники по умолчанию")
     sub.add_parser("fetch", help="обойти активные источники")
 
+    backfill = sub.add_parser("backfill-images", help="догрузить картинки к старым статьям")
+    backfill.add_argument("--limit", type=int, default=100)
+
     args = parser.parse_args()
 
     if args.command == "createsuperuser":
@@ -141,6 +197,8 @@ def main() -> int:
         return asyncio.run(seed_sources())
     if args.command == "fetch":
         return asyncio.run(fetch_all())
+    if args.command == "backfill-images":
+        return asyncio.run(backfill_images(args.limit))
     return 1
 
 

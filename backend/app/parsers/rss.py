@@ -12,8 +12,9 @@ import feedparser
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Article, ContentQuality, Source
-from app.parsers.fetch import FetchError, fetch_article_text
+from app.models import Article, ArticleImage, ContentQuality, Source
+from app.parsers.fetch import FetchError, extract_text, fetch_html
+from app.parsers.images import extract_images
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) 
 
     added = 0
     full_text = 0
+    total_images = 0
     entries = feed.entries[:limit]
 
     for entry in entries:
@@ -85,10 +87,13 @@ async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) 
         # В фиде обычно только анонс — за полным текстом идём на саму страницу.
         # Пауза между статьями: без неё dandavats.com начинает отдавать 429.
         content: str | None = None
+        images: list = []
         try:
             if added:
                 await asyncio.sleep(POLITE_DELAY_SECONDS)
-            content = await fetch_article_text(url)
+            html = await fetch_html(url)
+            content = extract_text(html)
+            images = extract_images(html, url)
         except FetchError as exc:
             log.warning("Полный текст %s недоступен: %s", url, exc)
 
@@ -101,21 +106,33 @@ async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) 
         else:
             quality = ContentQuality.empty
 
-        session.add(
-            Article(
-                source_id=source.id,
-                url=url,
-                title=unescape(title).strip(),
-                author=entry.get("author"),
-                published_at=_parsed_datetime(entry),
-                summary=summary or None,
-                content=content,
-                content_quality=quality,
-                image_url=_first_image(entry),
-                categories=_categories(entry) or None,
-            )
+        article = Article(
+            source_id=source.id,
+            url=url,
+            title=unescape(title).strip(),
+            author=entry.get("author"),
+            published_at=_parsed_datetime(entry),
+            summary=summary or None,
+            content=content,
+            content_quality=quality,
+            image_url=images[0].url if images else _first_image(entry),
+            categories=_categories(entry) or None,
         )
+        # Первую картинку отмечаем сразу: в посте почти всегда нужна хотя бы одна
+        article.images = [
+            ArticleImage(
+                url=image.url,
+                caption=image.caption,
+                width=image.width,
+                height=image.height,
+                position=index,
+                is_selected=index == 0,
+            )
+            for index, image in enumerate(images)
+        ]
+        session.add(article)
         added += 1
+        total_images += len(images)
 
     source.last_fetched_at = datetime.now(timezone.utc)
     source.last_error = None
@@ -126,4 +143,5 @@ async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) 
         "entries": len(entries),
         "added": added,
         "with_full_text": full_text,
+        "images": total_images,
     }

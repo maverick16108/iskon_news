@@ -8,9 +8,11 @@ import './assets/theme/system-contract.css'
 import './assets/theme/workspace-pages.css'
 import './assets/app.css'
 
+import { apply as applyAppearance } from './appearance'
 import App from './App.vue'
 import router from './router'
 
 document.body.classList.add('workspace-body')
+applyAppearance()
 
 createApp(App).use(createPinia()).use(router).mount('#app')
