@@ -49,12 +49,15 @@ async def get_fetch_settings(db) -> FetchSettings:
     return row
 
 
-def _due(row: FetchSettings, now: datetime) -> bool:
-    if not row.is_enabled:
+def _due_values(
+    enabled: bool, interval_minutes: int, last_run: datetime | None, now: datetime
+) -> bool:
+    """Пора ли обходить источники."""
+    if not enabled:
         return False
-    if row.last_run_at is None:
+    if last_run is None:
         return True
-    return now - row.last_run_at >= timedelta(minutes=row.interval_minutes)
+    return now - last_run >= timedelta(minutes=interval_minutes)
 
 
 async def run_fetch_round() -> dict[str, int]:
@@ -89,7 +92,11 @@ async def run_fetch_round() -> dict[str, int]:
 
 
 async def fetch_loop() -> None:
-    """Просыпается раз в минуту и обходит источники, когда подошёл срок."""
+    """Просыпается раз в минуту и обходит источники, когда подошёл срок.
+
+    Сессия здесь нужна только чтобы держать советующую блокировку: она живёт,
+    пока живёт соединение. Данные читаем короткими сессиями.
+    """
     async with SessionFactory() as db:
         if not await _try_lock(db, LOCK_FETCH):
             log.info("Обход источников уже ведёт другой процесс — эта задача не нужна")
@@ -99,10 +106,18 @@ async def fetch_loop() -> None:
 
         while True:
             try:
-                row = await get_fetch_settings(db)
-                await db.commit()
+                # Настройки перечитываем отдельной сессией. В долгоживущей
+                # объект остаётся в карте идентичности, а expire_on_commit
+                # у нас выключен — и цикл не увидел бы ни включения из
+                # интерфейса, ни смены интервала до перезапуска службы.
+                async with SessionFactory() as settings_db:
+                    row = await get_fetch_settings(settings_db)
+                    await settings_db.commit()
+                    enabled = row.is_enabled
+                    interval = row.interval_minutes
+                    last_run = row.last_run_at
 
-                if _due(row, datetime.now(timezone.utc)):
+                if _due_values(enabled, interval, last_run, datetime.now(timezone.utc)):
                     log.info("Пора обходить источники")
                     added = await run_fetch_round()
                     await _report(added)
