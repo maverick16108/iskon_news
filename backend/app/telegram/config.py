@@ -40,6 +40,13 @@ async def ensure_row(db: AsyncSession) -> TelegramSettings:
         )
         db.add(row)
         await db.flush()
+
+        # Канал из .env заводим сразу, чтобы список не был пустым
+        from app.models import TelegramChannel
+
+        if settings.telegram_channel:
+            db.add(TelegramChannel(settings_id=row.id, chat=settings.telegram_channel))
+            await db.flush()
     return row
 
 

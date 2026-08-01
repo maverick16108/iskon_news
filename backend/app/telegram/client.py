@@ -68,18 +68,17 @@ async def _request(token: str, method: str, **kwargs) -> dict:
     return payload["result"]
 
 
-async def check(token: str, channel: str) -> dict:
-    """Проверка связи: кто мы и виден ли канал. Ничего не публикует."""
-    me = await _request(token, "getMe", data={})
-    result = {"bot": me.get("username"), "bot_id": me.get("id")}
+async def check_bot(token: str) -> dict:
+    """Кто подключён. Ничего не публикует."""
+    return await _request(token, "getMe", data={})
 
-    try:
-        chat = await _request(token, "getChat", data={"chat_id": channel})
-        result["channel_title"] = chat.get("title")
-        result["channel_type"] = chat.get("type")
-    except TelegramError as exc:
-        result["channel_error"] = str(exc)
-        return result
+
+async def check_channel(token: str, channel: str) -> dict:
+    """Виден ли канал и может ли бот в нём публиковать. Ничего не публикует."""
+    me = await _request(token, "getMe", data={})
+    chat = await _request(token, "getChat", data={"chat_id": channel})
+
+    result = {"title": chat.get("title"), "type": chat.get("type")}
 
     # Право публиковать проверяем отдельно: без прав администратора
     # Telegram не отдаёт состав участников, и это само по себе ответ.
@@ -91,6 +90,7 @@ async def check(token: str, channel: str) -> dict:
         result["can_post"] = bool(member.get("can_post_messages"))
     except TelegramError as exc:
         result["member_error"] = str(exc)
+        result["can_post"] = False
 
     return result
 

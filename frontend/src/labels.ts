@@ -60,6 +60,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'prompt.update': 'Изменён шаблон промпта',
   'prompt.delete': 'Удалён шаблон промпта',
   'telegram.update': 'Изменены настройки публикации',
+  'post.refine': 'Правка поста через ИИ',
+  'telegram.channel_add': 'Добавлен канал',
+  'telegram.channel_update': 'Изменён канал',
+  'telegram.channel_delete': 'Убран канал',
 }
 
 export function formatDate(value: string | null): string {

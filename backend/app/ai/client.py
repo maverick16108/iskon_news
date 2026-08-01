@@ -208,6 +208,83 @@ async def translate_captions(captions: list[str]) -> list[str]:
     return translated
 
 
+async def refine(
+    article: Article, source: Source, current: dict, instruction: str
+) -> Draft:
+    """Правит уже готовый пост по указанию редактора.
+
+    Модель получает исходную статью, текущий пост и просьбу человека.
+    Ограничения те же, что при первой генерации: факты только из статьи,
+    хэштеги из списка канала, лимит по длине — поэтому системный промпт
+    берём тот же самый.
+    """
+    signature = source.signature_line
+    budget = _body_budget(signature)
+
+    template = source.prompt_template.body if source.prompt_template else None
+
+    messages = [
+        {"role": "system", "content": render_system_prompt(template)},
+        {
+            "role": "user",
+            "content": build_user_prompt(
+                title=article.title,
+                text=article.text_for_ai,
+                body_budget=budget,
+                published=article.published_at.strftime("%d.%m.%Y") if article.published_at else None,
+                author=article.author,
+                is_excerpt=article.content_quality is not ContentQuality.full,
+            ),
+        },
+        # Текущий пост подаём как прошлый ответ модели — тогда правка
+        # ложится на него, а не начинается с чистого листа.
+        {"role": "assistant", "content": json.dumps(current, ensure_ascii=False)},
+        {
+            "role": "user",
+            "content": (
+                f"Правка от редактора: {instruction.strip()}\n\n"
+                "Внеси только её, остальное оставь как есть. Все прежние правила "
+                "продолжают действовать: ничего не выдумывай сверх статьи, теги "
+                f"бери из списка, тело поста — до {budget} символов. "
+                "Верни тот же JSON."
+            ),
+        },
+    ]
+
+    config = await current_config()
+    client = build_client(config)
+
+    try:
+        response = await client.chat.completions.create(
+            model=config.model,
+            messages=messages,  # type: ignore[arg-type]
+            response_format={"type": "json_object"},
+            temperature=config.temperature,
+        )
+    except RateLimitError as exc:
+        raise AIError(f"OpenAI: превышен лимит запросов — {exc}") from exc
+    except APIError as exc:
+        raise AIError(f"OpenAI вернул ошибку: {exc}") from exc
+
+    raw = response.choices[0].message.content or ""
+    tags, title, body = _parse_response(raw)
+
+    draft = Draft(
+        hashtags=" ".join(tags),
+        title=title,
+        body=body,
+        signature=signature,
+        raw=raw,
+        model=config.model,
+    )
+
+    if draft.char_count > MAX_POST_CHARS:
+        overflow = draft.char_count - MAX_POST_CHARS
+        draft = await _shorten(client, config.model, messages, raw, overflow, draft)
+
+    return draft
+
+
 async def _shorten(
     client: AsyncOpenAI,
     model: str,

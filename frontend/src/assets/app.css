@@ -149,6 +149,13 @@ body {
   text-overflow: ellipsis;
 }
 
+.brand-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
 /* Кнопка без рамки и фона — только иконка */
 .sidebar-toggle {
   flex: none;
@@ -228,10 +235,56 @@ body {
 
 .ui-shell.is-collapsed .ui-brand-copy,
 .ui-shell.is-collapsed .ui-nav-label,
-.ui-shell.is-collapsed .ui-nav-link span:not(.nav-icon),
 .ui-shell.is-collapsed .ui-profile-copy,
 .ui-shell.is-collapsed .profile-caret {
   display: none;
+}
+
+/* Подпись пункта не удаляем из разметки, а прячем визуально:
+   display: none выкинул бы её и из дерева доступности. */
+.ui-shell.is-collapsed .ui-nav-link span:not(.nav-icon) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Свёрнутое меню короткое, прокрутка ему не нужна — снимаем её,
+   иначе всплывающая подпись обрезалась бы краем колонки. */
+.ui-shell.is-collapsed .sidebar-scroll {
+  overflow: visible;
+}
+
+.ui-shell.is-collapsed .ui-nav-link {
+  position: relative;
+}
+
+.ui-shell.is-collapsed .ui-nav-link[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 200;
+  padding: 7px 12px;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 9px;
+  background: var(--scheme-surface-raised, #fff);
+  color: var(--scheme-text, #18304e);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px var(--scheme-shadow, rgba(16, 35, 63, 0.18));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.ui-shell.is-collapsed .ui-nav-link[data-tip]:hover::after,
+.ui-shell.is-collapsed .ui-nav-link[data-tip]:focus-visible::after {
+  opacity: 1;
 }
 
 .ui-shell.is-collapsed .ui-nav-link,
@@ -985,6 +1038,33 @@ textarea.ws-input {
 
 .skeleton-block {
   height: 100px;
+}
+
+/* --- Карточка бота ------------------------------------------------------- */
+
+.bot-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bot-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--scheme-accent, #1768ff);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.bot-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--scheme-text, #18304e);
 }
 
 /* --- Промпты ------------------------------------------------------------- */

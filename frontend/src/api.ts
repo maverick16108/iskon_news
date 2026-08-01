@@ -212,12 +212,24 @@ export interface TelegramSettings {
   updated_by: string | null
 }
 
-export interface TelegramCheckResult {
-  ok: boolean
-  message: string
-  bot: string | null
-  channel_title: string | null
+export interface TelegramChannel {
+  id: number
+  chat: string
+  title: string | null
+  is_enabled: boolean
   can_post: boolean | null
+  last_status: string | null
+  last_checked_at: string | null
+}
+
+export interface TelegramInfo {
+  token_set: boolean
+  is_enabled: boolean
+  bot_username: string | null
+  bot_name: string | null
+  bot_id: number | null
+  channels: TelegramChannel[]
+  message: string
 }
 
 export const MAX_POST_CHARS = 1000

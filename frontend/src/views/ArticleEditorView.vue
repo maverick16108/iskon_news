@@ -176,6 +176,40 @@ async function toggleImage(image: ArticleImage) {
   }
 }
 
+// --- Правка через модель --------------------------------------------------
+
+const instruction = ref('')
+const refining = ref(false)
+
+/** Готовые формулировки: чаще всего просят именно это. */
+const QUICK_FIXES = [
+  'Сделай короче на 150 символов',
+  'Убери последний абзац',
+  'Добавь больше конкретики: числа, имена, места',
+  'Сделай заголовок короче и живее',
+]
+
+async function refinePost() {
+  if (!instruction.value.trim()) return
+
+  refining.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const result = await api.post<Post>(`/api/articles/${articleId}/refine`, {
+      instruction: instruction.value.trim(),
+    })
+    if (article.value) article.value.post = result
+    syncDraft()
+    notice.value = `Правка внесена: ${result.char_count} символов`
+    instruction.value = ''
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось внести правку'
+  } finally {
+    refining.value = false
+  }
+}
+
 // --- Свои фотографии ------------------------------------------------------
 
 const dropActive = ref(false)
@@ -471,6 +505,46 @@ onMounted(async () => {
                   hidden
                   @change="uploadFiles(($event.target as HTMLInputElement).files)"
                 />
+              </div>
+            </div>
+
+            <div v-if="post" class="ws-field">
+              <label class="ws-field-label">Попросить модель поправить</label>
+              <div>
+                <div class="row">
+                  <input
+                    v-model="instruction"
+                    class="ws-input"
+                    style="flex: 1"
+                    placeholder="Например: убери второй абзац и добавь, сколько было коров"
+                    :disabled="refining"
+                    @keydown.enter.prevent="refinePost"
+                  />
+                  <button
+                    class="ws-btn ws-btn-primary"
+                    type="button"
+                    :disabled="refining || !instruction.trim()"
+                    @click="refinePost"
+                  >
+                    {{ refining ? 'Правим…' : 'Поправить' }}
+                  </button>
+                </div>
+                <div class="row" style="margin-top: 6px; gap: 6px">
+                  <button
+                    v-for="hint in QUICK_FIXES"
+                    :key="hint"
+                    type="button"
+                    class="ws-chip"
+                    :disabled="refining"
+                    @click="((instruction = hint), refinePost())"
+                  >
+                    {{ hint }}
+                  </button>
+                </div>
+                <small class="muted">
+                  Правка ложится на текущий текст, включая ваши ручные изменения.
+                  Ограничения те же: ничего сверх статьи, теги из списка, лимит 1000 символов.
+                </small>
               </div>
             </div>
 

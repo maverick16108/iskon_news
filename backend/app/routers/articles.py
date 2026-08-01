@@ -8,14 +8,31 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.ai.client import AIError, rewrite, translate_captions
+from app.ai.client import AIError, refine, rewrite, translate_captions
 from app.deps import CurrentUser, DbDep, write_audit
-from app.models import Article, ArticleImage, ContentQuality, Post, PostStatus, Source
+from app.models import (
+    Article,
+    ArticleImage,
+    ContentQuality,
+    Post,
+    PostStatus,
+    Source,
+    TelegramChannel,
+)
 from app.parsers.fetch import FetchError
 from app.parsers.imagecache import ensure_cached, local_path, media_type_for, save_upload
 from app.telegram.client import TelegramError, render_html, send_post
 from app.telegram.config import current as telegram_config
-from app.schemas import ArticleDetail, ArticleListItem, ImageOut, ImageUpdate, Message, PostOut, PostUpdate
+from app.schemas import (
+    ArticleDetail,
+    ArticleListItem,
+    ImageOut,
+    ImageUpdate,
+    Message,
+    PostOut,
+    PostRefine,
+    PostUpdate,
+)
 
 log = logging.getLogger(__name__)
 
@@ -181,6 +198,60 @@ async def rewrite_article(article_id: int, request: Request, db: DbDep, user: Cu
     return post
 
 
+@router.post("/{article_id}/refine", response_model=PostOut)
+async def refine_post(
+    article_id: int, payload: PostRefine, request: Request, db: DbDep, user: CurrentUser
+):
+    """Правит готовый пост по указанию редактора."""
+    article = await db.scalar(
+        select(Article)
+        .where(Article.id == article_id)
+        .options(selectinload(Article.post), selectinload(Article.source))
+    )
+    if article is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Статья не найдена")
+
+    post = article.post
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пост ещё не создан")
+    if post.status is PostStatus.published:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Опубликованный пост править нельзя")
+
+    # Отдаём модели то, что сейчас в посте, включая правки человека
+    current = {
+        "hashtags": post.hashtags.split(),
+        "title": post.title,
+        "body": post.body,
+    }
+
+    try:
+        draft = await refine(article, article.source, current, payload.instruction)
+    except AIError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    post.hashtags = draft.hashtags
+    post.title = draft.title
+    post.body = draft.body
+    post.ai_raw_output = draft.raw
+    post.ai_model = draft.model
+    post.ai_error = None
+    post.status = PostStatus.edited
+    post.edited_by_id = user.id
+
+    await write_audit(
+        db,
+        user=user,
+        action="post.refine",
+        entity_type="article",
+        entity_id=article_id,
+        details={"instruction": payload.instruction[:200], "chars": post.char_count},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(post)
+    return post
+
+
 @router.patch("/{article_id}/post", response_model=PostOut)
 async def update_post(
     article_id: int, payload: PostUpdate, request: Request, db: DbDep, user: CurrentUser
@@ -268,14 +339,35 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
             post.hashtags, post.title, post.body, post.signature, "Новости ИСККОН t.me/iskconru"
         )
 
-        try:
-            sent = await send_post(
-                token=config.token, channel=config.channel, text=text, photos=paths
+        targets = list(
+            await db.scalars(
+                select(TelegramChannel).where(TelegramChannel.is_enabled.is_(True))
             )
-        except TelegramError as exc:
+        )
+        if not targets:
             raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, f"Telegram не принял пост: {exc}"
-            ) from exc
+                status.HTTP_400_BAD_REQUEST,
+                "Отправка включена, но ни один канал не выбран",
+            )
+
+        # Отправляем по очереди. Если упал первый — не публикуем никуда,
+        # чтобы не оставить пост наполовину разосланным.
+        results = []
+        for index, target in enumerate(targets):
+            try:
+                results.append(await send_post(
+                    token=config.token, channel=target.chat, text=text, photos=paths
+                ))
+            except TelegramError as exc:
+                if index == 0:
+                    raise HTTPException(
+                        status.HTTP_502_BAD_GATEWAY,
+                        f"Telegram не принял пост в {target.chat}: {exc}",
+                    ) from exc
+                # Первый канал уже принял — остальные ошибки только логируем
+                log.error("Пост не ушёл в %s: %s", target.chat, exc)
+
+        sent = results[0] if results else None
 
     post.status = PostStatus.published
     post.published_at = datetime.now(timezone.utc)

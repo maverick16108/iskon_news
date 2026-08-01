@@ -112,6 +112,12 @@ class PostUpdate(BaseModel):
     signature: str | None = Field(default=None, max_length=255)
 
 
+class PostRefine(BaseModel):
+    """Свободное указание модели: что поправить в готовом посте."""
+
+    instruction: str = Field(min_length=3, max_length=1000)
+
+
 class ImageOut(ORMModel):
     id: int
     url: str | None
@@ -243,12 +249,32 @@ class TelegramSettingsUpdate(BaseModel):
     is_enabled: bool | None = None
 
 
-class TelegramCheckResult(BaseModel):
-    ok: bool
-    message: str
-    bot: str | None = None
-    channel_title: str | None = None
-    can_post: bool | None = None
+class TelegramChannelOut(BaseModel):
+    id: int
+    chat: str
+    title: str | None
+    is_enabled: bool
+    can_post: bool | None
+    last_status: str | None
+    last_checked_at: datetime | None
+
+
+class TelegramChannelCreate(BaseModel):
+    chat: str = Field(min_length=2, max_length=128)
+
+
+class TelegramChannelUpdate(BaseModel):
+    is_enabled: bool | None = None
+
+
+class TelegramInfo(BaseModel):
+    token_set: bool
+    is_enabled: bool
+    bot_username: str | None = None
+    bot_name: str | None = None
+    bot_id: int | None = None
+    channels: list[TelegramChannelOut] = []
+    message: str = ""
 
 
 # --- Журнал ---------------------------------------------------------------

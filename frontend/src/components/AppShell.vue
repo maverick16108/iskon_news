@@ -114,7 +114,25 @@ onBeforeUnmount(() => {
   <div class="ui-shell" :class="{ 'is-collapsed': collapsed, 'is-resizing': dragging }">
     <aside class="ui-sidebar" :class="{ 'is-visible': navOpen }" aria-label="Основная навигация">
       <div class="brand-row">
-        <RouterLink class="ui-brand" :to="{ name: 'articles' }" title="Новости ИСККОН">
+        <!-- В свёрнутом виде логотип сам разворачивает панель:
+             отдельная кнопка занимала бы вторую строку в узкой колонке -->
+        <button
+          v-if="collapsed"
+          type="button"
+          class="ui-brand brand-button"
+          title="Развернуть меню"
+          @click="collapsed = false"
+        >
+          <GarudaMark :size="26" style="color: var(--scheme-accent, #1768ff)" />
+          <span class="sr-only">Развернуть меню</span>
+        </button>
+
+        <RouterLink
+          v-else
+          class="ui-brand"
+          :to="{ name: 'articles' }"
+          title="Новости ИСККОН"
+        >
           <GarudaMark :size="26" style="color: var(--scheme-accent, #1768ff)" />
           <span class="ui-brand-copy">
             Новости ИСККОН
@@ -122,6 +140,7 @@ onBeforeUnmount(() => {
           </span>
         </RouterLink>
         <button
+          v-if="!collapsed"
           type="button"
           class="sidebar-toggle"
           :aria-expanded="!collapsed"
@@ -142,7 +161,7 @@ onBeforeUnmount(() => {
             <RouterLink
               class="ui-nav-link"
               :to="{ name: 'articles' }"
-              title="Лента новостей"
+              data-tip="Лента новостей"
               @click="navOpen = false"
             >
               <NavIcon name="feed" />
@@ -151,7 +170,7 @@ onBeforeUnmount(() => {
             <RouterLink
               class="ui-nav-link"
               :to="{ name: 'sources' }"
-              title="Источники"
+              data-tip="Источники"
               @click="navOpen = false"
             >
               <NavIcon name="sources" />
@@ -166,7 +185,7 @@ onBeforeUnmount(() => {
             <RouterLink
               class="ui-nav-link"
               :to="{ name: 'users' }"
-              title="Пользователи"
+              data-tip="Пользователи"
               @click="navOpen = false"
             >
               <NavIcon name="users" />
@@ -175,7 +194,7 @@ onBeforeUnmount(() => {
             <RouterLink
               class="ui-nav-link"
               :to="{ name: 'prompts' }"
-              title="Промпты"
+              data-tip="Промпты"
               @click="navOpen = false"
             >
               <NavIcon name="prompts" />
@@ -184,7 +203,7 @@ onBeforeUnmount(() => {
             <RouterLink
               class="ui-nav-link"
               :to="{ name: 'llm-settings' }"
-              title="Настройки модели"
+              data-tip="Настройки модели"
               @click="navOpen = false"
             >
               <NavIcon name="model" />
@@ -192,8 +211,17 @@ onBeforeUnmount(() => {
             </RouterLink>
             <RouterLink
               class="ui-nav-link"
+              :to="{ name: 'telegram-settings' }"
+              data-tip="Публикация в канал"
+              @click="navOpen = false"
+            >
+              <NavIcon name="telegram" />
+              <span>Публикация в канал</span>
+            </RouterLink>
+            <RouterLink
+              class="ui-nav-link"
               :to="{ name: 'audit' }"
-              title="Журнал действий"
+              data-tip="Журнал действий"
               @click="navOpen = false"
             >
               <NavIcon name="audit" />

@@ -309,12 +309,43 @@ class TelegramSettings(Base):
     updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     updated_by: Mapped[User | None] = relationship()
 
+    channels: Mapped[list[TelegramChannel]] = relationship(
+        back_populates="settings", cascade="all, delete-orphan", order_by="TelegramChannel.id"
+    )
+
     @property
     def token_hint(self) -> str | None:
         """Хвост токена для интерфейса — сам токен наружу не отдаём."""
         if not self.bot_token:
             return None
         return f"…{self.bot_token[-4:]}" if len(self.bot_token) > 8 else "…"
+
+
+class TelegramChannel(Base):
+    """Канал, куда бот публикует посты.
+
+    Список ведём вручную: Bot API не позволяет узнать, в каких каналах
+    состоит бот, — метода для этого попросту нет. Проверить можно только
+    конкретный канал, который мы назвали.
+    """
+
+    __tablename__ = "telegram_channels"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    settings_id: Mapped[int] = mapped_column(
+        ForeignKey("telegram_settings.id", ondelete="CASCADE"), index=True
+    )
+    settings: Mapped[TelegramSettings] = relationship(back_populates="channels")
+
+    chat: Mapped[str] = mapped_column(String(128), unique=True)   # @имя или числовой id
+    title: Mapped[str | None] = mapped_column(String(255))        # подтягивается при проверке
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status: Mapped[str | None] = mapped_column(String(512))
+    can_post: Mapped[bool | None] = mapped_column(Boolean)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # --------------------------------------------------------------------------
