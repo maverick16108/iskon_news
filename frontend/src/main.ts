@@ -15,4 +15,16 @@ import router from './router'
 document.body.classList.add('workspace-body')
 applyAppearance()
 
+// Chrome считает клик по ссылке «видимым фокусом» и рисует вокруг неё обводку —
+// после перехода по пункту меню она оставалась висеть. Отличаем мышь от
+// клавиатуры сами: обводку показываем только тем, кто ходит табом, иначе
+// пришлось бы убирать её совсем и потерять навигацию с клавиатуры.
+document.addEventListener('pointerdown', () => {
+  document.documentElement.classList.remove('kbd-nav')
+})
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') document.documentElement.classList.add('kbd-nav')
+})
+
 createApp(App).use(createPinia()).use(router).mount('#app')

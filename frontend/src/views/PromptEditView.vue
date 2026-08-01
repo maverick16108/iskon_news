@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { api, type PlaceholderInfo, type PromptTemplate } from '@/api'
+import NavIcon from '@/components/NavIcon.vue'
 import ToastStack from '@/components/ToastStack.vue'
 
 const route = useRoute()
@@ -208,12 +209,15 @@ onMounted(async () => {
           </div>
         </div>
 
-        <label class="row" style="gap: 6px; cursor: pointer">
-          <input
-            v-model="form.is_default"
-            type="checkbox"
-            :disabled="original?.is_default"
-          />
+        <label class="row" style="gap: 8px; cursor: pointer">
+          <span class="ui-check" :class="{ 'is-on': form.is_default }">
+            <input
+              v-model="form.is_default"
+              type="checkbox"
+              :disabled="original?.is_default"
+            />
+            <NavIcon name="tick" />
+          </span>
           <span>Применять к источникам, которым свой шаблон не назначен</span>
         </label>
 

@@ -1122,6 +1122,164 @@ textarea.ws-input {
   white-space: nowrap;
 }
 
+/* Обводка фокуса — только для клавиатуры (класс ставится в main.ts).
+   Поля ввода не трогаем: там рамка фокуса нужна всегда, ей же показывается,
+   куда попадёт набранный текст. */
+html:not(.kbd-nav) a:focus-visible,
+html:not(.kbd-nav) button:focus-visible,
+html:not(.kbd-nav) [tabindex]:focus-visible,
+html:not(.kbd-nav) label:focus-within {
+  outline: none;
+}
+
+/* --- Действия строкой иконок ---------------------------------------------
+   Три-четыре подписи на строку таблицы переносились в столбик и растягивали
+   её втрое. Иконки помещаются в один ряд; название показывается подсказкой
+   при наведении, а для скринридера остаётся в aria-label. */
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.icon-btn {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--scheme-text-muted, #7b899b);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.icon-btn .nav-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--scheme-accent, #1768ff);
+  border-color: var(--scheme-border, #dce3eb);
+  background: var(--scheme-surface-hover, #eef2f7);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--scheme-accent, #1768ff);
+  outline-offset: 1px;
+}
+
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.icon-btn.is-danger:hover:not(:disabled) {
+  color: var(--scheme-danger, #d96555);
+}
+
+.icon-btn.is-busy .nav-icon {
+  animation: icon-spin 900ms linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Подсказка растёт влево: кнопки прижаты к правому краю таблицы */
+.icon-btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 200;
+  padding: 6px 10px;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 8px;
+  background: var(--scheme-surface-raised, #fff);
+  color: var(--scheme-text, #18304e);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px var(--scheme-shadow, rgba(16, 35, 63, 0.18));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.icon-btn[data-tip]:hover::after,
+.icon-btn[data-tip]:focus-visible::after {
+  opacity: 1;
+}
+
+/* --- Свой флажок ---------------------------------------------------------
+   Системный чекбокс выбивался из оформления так же, как когда-то
+   системные выпадающие списки. */
+
+.ui-check {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--scheme-border-strong, #c7d1dd);
+  border-radius: 5px;
+  background: var(--scheme-surface, #fff);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.ui-check input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ui-check .nav-icon {
+  width: 13px;
+  height: 13px;
+  color: #fff;
+  stroke-width: 2.4;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ui-check.is-on {
+  background: var(--scheme-accent, #1768ff);
+  border-color: var(--scheme-accent, #1768ff);
+}
+
+.ui-check.is-on .nav-icon {
+  opacity: 1;
+}
+
+.ui-check:hover {
+  border-color: var(--scheme-accent, #1768ff);
+}
+
+.ui-check:focus-within {
+  outline: 2px solid var(--scheme-accent, #1768ff);
+  outline-offset: 2px;
+}
+
 .channel-switch {
   display: inline-flex;
   align-items: center;

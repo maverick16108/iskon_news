@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import { api, type TelegramChannel, type TelegramInfo, type TelegramSettings } from '@/api'
+import NavIcon from '@/components/NavIcon.vue'
 import ToastStack from '@/components/ToastStack.vue'
 import { formatDate } from '@/labels'
 
@@ -241,11 +242,14 @@ onMounted(load)
                    нельзя. У флажка состояние видно, а щелчок его меняет. -->
               <td class="wrap">
                 <label class="channel-switch">
-                  <input
-                    type="checkbox"
-                    :checked="channel.is_enabled"
-                    @change="toggleChannel(channel)"
-                  />
+                  <span class="ui-check" :class="{ 'is-on': channel.is_enabled }">
+                    <input
+                      type="checkbox"
+                      :checked="channel.is_enabled"
+                      @change="toggleChannel(channel)"
+                    />
+                    <NavIcon name="tick" />
+                  </span>
                   <span>{{ channel.is_enabled ? 'Да' : 'Нет' }}</span>
                 </label>
                 <div
@@ -258,16 +262,24 @@ onMounted(load)
               </td>
               <td>{{ formatDate(channel.last_checked_at) }}</td>
               <td>
-                <div class="row" style="gap: 6px; justify-content: flex-end">
+                <div class="row-actions">
                   <button
-                    class="ws-btn ws-btn-quiet"
+                    class="icon-btn"
+                    :class="{ 'is-busy': busyId === channel.id }"
                     :disabled="busyId === channel.id"
+                    :data-tip="busyId === channel.id ? 'Проверяем…' : 'Проверить права бота'"
+                    :aria-label="busyId === channel.id ? 'Проверяем' : 'Проверить права бота'"
                     @click="checkChannel(channel)"
                   >
-                    {{ busyId === channel.id ? 'Проверяем…' : 'Проверить' }}
+                    <NavIcon name="check" />
                   </button>
-                  <button class="ws-btn ws-btn-danger" @click="removeChannel(channel)">
-                    Убрать
+                  <button
+                    class="icon-btn is-danger"
+                    data-tip="Убрать из списка"
+                    aria-label="Убрать канал из списка"
+                    @click="removeChannel(channel)"
+                  >
+                    <NavIcon name="trash" />
                   </button>
                 </div>
               </td>

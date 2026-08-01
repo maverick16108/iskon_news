@@ -78,5 +78,42 @@ defineProps<{ name: string }>()
       <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
       <path d="M8 3.5v13" />
     </template>
+
+    <!-- Собрать новости: стрелки по кругу -->
+    <template v-else-if="name === 'refresh'">
+      <path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6" />
+      <path d="M16.5 3.5V7h-3.5" />
+    </template>
+
+    <!-- Править: карандаш -->
+    <template v-else-if="name === 'edit'">
+      <path d="M13.4 3.6a1.6 1.6 0 0 1 2.3 2.3L7.4 14.2l-3.1.8.8-3.1z" />
+      <path d="M12 5l3 3" />
+    </template>
+
+    <!-- Включить / отключить: кнопка питания -->
+    <template v-else-if="name === 'power'">
+      <path d="M10 2.8v6.4" />
+      <path d="M14.4 5.3a6 6 0 1 1-8.8 0" />
+    </template>
+
+    <!-- Удалить: корзина -->
+    <template v-else-if="name === 'trash'">
+      <path d="M3.5 5.5h13" />
+      <path d="M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" />
+      <path d="M5.5 5.5l.8 10a1 1 0 0 0 1 1h5.4a1 1 0 0 0 1-1l.8-10" />
+      <path d="M8.5 8.5v5M11.5 8.5v5" />
+    </template>
+
+    <!-- Проверить доступ: галочка в круге -->
+    <template v-else-if="name === 'check'">
+      <circle cx="10" cy="10" r="7" />
+      <path d="M6.8 10.2l2.2 2.2 4.2-4.6" />
+    </template>
+
+    <!-- Отметка в своём флажке -->
+    <template v-else-if="name === 'tick'">
+      <path d="M4.5 10.5l3.5 3.5 7.5-8" />
+    </template>
   </svg>
 </template>

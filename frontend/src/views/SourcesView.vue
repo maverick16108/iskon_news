@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import { api, type FetchResult, type PromptTemplate, type Source, type SourceKind } from '@/api'
+import NavIcon from '@/components/NavIcon.vue'
 import TableSkeleton from '@/components/TableSkeleton.vue'
 import ToastStack from '@/components/ToastStack.vue'
 import UiSelect from '@/components/UiSelect.vue'
@@ -421,20 +422,42 @@ onMounted(async () => {
                 </div>
               </td>
               <td>
-                <div class="row" style="gap: 6px; justify-content: flex-end">
+                <div class="row-actions">
                   <button
-                    class="ws-btn ws-btn-quiet"
+                    class="icon-btn"
+                    :class="{ 'is-busy': busyId === source.id }"
                     :disabled="busyId === source.id"
+                    :data-tip="busyId === source.id ? 'Собираем…' : 'Собрать новости'"
+                    :aria-label="busyId === source.id ? 'Собираем' : 'Собрать новости'"
                     @click="fetchOne(source)"
                   >
-                    {{ busyId === source.id ? 'Собираем…' : 'Собрать' }}
+                    <NavIcon name="refresh" />
                   </button>
                   <template v-if="auth.isSuperadmin">
-                    <button class="ws-btn ws-btn-quiet" @click="startEdit(source)">Править</button>
-                    <button class="ws-btn ws-btn-quiet" @click="toggleActive(source)">
-                      {{ source.is_active ? 'Отключить' : 'Включить' }}
+                    <button
+                      class="icon-btn"
+                      data-tip="Править"
+                      aria-label="Править источник"
+                      @click="startEdit(source)"
+                    >
+                      <NavIcon name="edit" />
                     </button>
-                    <button class="ws-btn ws-btn-danger" @click="remove(source)">Удалить</button>
+                    <button
+                      class="icon-btn"
+                      :data-tip="source.is_active ? 'Отключить' : 'Включить'"
+                      :aria-label="source.is_active ? 'Отключить источник' : 'Включить источник'"
+                      @click="toggleActive(source)"
+                    >
+                      <NavIcon name="power" />
+                    </button>
+                    <button
+                      class="icon-btn is-danger"
+                      data-tip="Удалить"
+                      aria-label="Удалить источник"
+                      @click="remove(source)"
+                    >
+                      <NavIcon name="trash" />
+                    </button>
                   </template>
                 </div>
               </td>
