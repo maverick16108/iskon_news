@@ -97,13 +97,26 @@ function resetWidth() {
   localStorage.setItem(WIDTH_KEY, String(DEFAULT_WIDTH))
 }
 
+/** На мобильном панель — выдвижная шторка: закрываем по Esc и по фону. */
+function onShellKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') navOpen.value = false
+}
+
+watch(navOpen, (open) => {
+  // Пока шторка открыта, страница под ней не прокручивается
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+
 onMounted(() => {
+  window.addEventListener('keydown', onShellKeydown)
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', stopDrag)
   window.addEventListener('pointercancel', stopDrag)
 })
 
 onBeforeUnmount(() => {
+  document.body.style.overflow = ''
+  window.removeEventListener('keydown', onShellKeydown)
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', stopDrag)
   window.removeEventListener('pointercancel', stopDrag)
@@ -112,7 +125,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="ui-shell" :class="{ 'is-collapsed': collapsed, 'is-resizing': dragging }">
-    <aside class="ui-sidebar" :class="{ 'is-visible': navOpen }" aria-label="Основная навигация">
+    <aside class="ui-sidebar" :class="{ open: navOpen }" aria-label="Основная навигация">
       <div class="brand-row">
         <!-- В свёрнутом виде логотип сам разворачивает панель:
              отдельная кнопка занимала бы вторую строку в узкой колонке -->
@@ -257,6 +270,8 @@ onBeforeUnmount(() => {
         @keydown="onHandleKeydown"
       />
     </aside>
+
+    <div v-if="navOpen" class="nav-scrim" @click="navOpen = false" />
 
     <main class="ui-main">
       <header class="ui-page-header">

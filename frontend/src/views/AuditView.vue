@@ -137,14 +137,14 @@ onMounted(load)
           </thead>
           <tbody>
             <tr v-for="entry in sorted" :key="entry.id">
-              <td>{{ formatDate(entry.created_at) }}</td>
-              <td>{{ entry.username || '—' }}</td>
-              <td>{{ actionLabel(entry.action) }}</td>
-              <td class="mono" style="font-size: 12px">
+              <td data-label="Когда">{{ formatDate(entry.created_at) }}</td>
+              <td data-label="Кто">{{ entry.username || '—' }}</td>
+              <td class="cell-title">{{ actionLabel(entry.action) }}</td>
+              <td class="mono" style="font-size: 12px" data-label="Объект">
                 {{ entry.entity_type ? `${entry.entity_type} #${entry.entity_id}` : '—' }}
               </td>
-              <td class="wrap muted" style="font-size: 12px">{{ detailsText(entry.details) }}</td>
-              <td class="mono" style="font-size: 12px">{{ entry.ip || '—' }}</td>
+              <td class="wrap muted" style="font-size: 12px" data-label="Подробности">{{ detailsText(entry.details) }}</td>
+              <td class="mono" style="font-size: 12px" data-label="Адрес">{{ entry.ip || '—' }}</td>
             </tr>
           </tbody>
         </table>

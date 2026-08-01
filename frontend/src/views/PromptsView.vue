@@ -88,15 +88,15 @@ onMounted(load)
           </thead>
           <tbody>
             <tr v-for="prompt in prompts" :key="prompt.id">
-              <td>
+              <td class="cell-title">
                 <b>{{ prompt.name }}</b>
                 <span v-if="prompt.is_default" class="ws-badge healthy" style="margin-left: 8px">
                   по умолчанию
                 </span>
               </td>
-              <td class="wrap muted">{{ prompt.description || '—' }}</td>
-              <td class="num">{{ prompt.used_by_sources || '—' }}</td>
-              <td>
+              <td class="wrap muted" data-label="Пояснение">{{ prompt.description || '—' }}</td>
+              <td class="num" data-label="Источников">{{ prompt.used_by_sources || '—' }}</td>
+              <td data-label="Изменён">
                 {{ formatDate(prompt.updated_at) }}
                 <div v-if="prompt.updated_by" class="muted" style="font-size: 11px">
                   {{ prompt.updated_by }}

@@ -276,12 +276,12 @@ onMounted(load)
           </thead>
           <tbody>
             <tr v-for="user in sorted" :key="user.id">
-              <td>
+              <td class="cell-title">
                 <b>{{ user.username }}</b>
                 <span v-if="user.id === auth.user?.id" class="muted"> — это вы</span>
               </td>
-              <td>{{ user.full_name || '—' }}</td>
-              <td>
+              <td data-label="Имя">{{ user.full_name || '—' }}</td>
+              <td data-label="Роль">
                 <UiSelect
                   :model-value="user.role"
                   :options="ROLE_OPTIONS"
@@ -290,9 +290,9 @@ onMounted(load)
                   @update:model-value="changeRole(user, $event)"
                 />
               </td>
-              <td>{{ formatDate(user.created_at) }}</td>
-              <td>{{ formatDate(user.last_login_at) }}</td>
-              <td>
+              <td data-label="Заведён">{{ formatDate(user.created_at) }}</td>
+              <td data-label="Последний вход">{{ formatDate(user.last_login_at) }}</td>
+              <td data-label="Состояние">
                 <span class="ws-badge" :class="user.is_active ? 'healthy' : 'neutral'">
                   {{ user.is_active ? 'Активен' : 'Отключён' }}
                 </span>

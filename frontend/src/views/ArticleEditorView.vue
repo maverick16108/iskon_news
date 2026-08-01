@@ -594,27 +594,45 @@ onMounted(async () => {
               <b>Эта новость есть и в других источниках.</b>
               <ul class="repeat-list">
                 <li v-for="(entry, index) in article.repeats" :key="index">
-                  {{ entry.source }} —
-                  <RouterLink
-                    v-if="entry.article_id"
-                    :to="{ name: 'article', params: { id: entry.article_id } }"
-                  >
-                    отдельная карточка в ленте
-                  </RouterLink>
-                  <a v-else-if="entry.url" :href="entry.url" target="_blank" rel="noopener">
-                    тот же адрес
-                  </a>
-                  <span v-else class="muted">тот же адрес</span>
-                  <!-- Публиковать один сюжет дважды не нужно, поэтому
-                       состояние поста двойника показываем прямо здесь -->
-                  <template v-if="entry.post_status">
+                  <b>{{ entry.source }}</b>
+
+                  <!-- Двойник — отдельная карточка со своим постом. Совпадение
+                       по адресу — та же самая карточка, и пост у неё этот же. -->
+                  <template v-if="entry.article_id">
                     —
-                    <span class="ws-badge" :class="POST_STATUS_TONE[entry.post_status]">
-                      {{ POST_STATUS_LABELS[entry.post_status] }}
+                    <RouterLink :to="{ name: 'article', params: { id: entry.article_id } }">
+                      открыть карточку
+                    </RouterLink>
+                    <span
+                      class="ws-badge"
+                      :class="entry.post_status ? POST_STATUS_TONE[entry.post_status] : 'neutral'"
+                    >
+                      {{ entry.post_status ? POST_STATUS_LABELS[entry.post_status] : 'поста нет' }}
                     </span>
                     <a
                       v-if="entry.telegram_url"
                       :href="entry.telegram_url"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      пост в канале
+                    </a>
+                  </template>
+
+                  <template v-else>
+                    — тот же адрес, это одна и та же карточка
+                    <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener">
+                      открыть на сайте
+                    </a>
+                    <span
+                      class="ws-badge"
+                      :class="post ? POST_STATUS_TONE[post.status] : 'neutral'"
+                    >
+                      {{ post ? POST_STATUS_LABELS[post.status] : 'поста нет' }}
+                    </span>
+                    <a
+                      v-if="post?.telegram_url"
+                      :href="post.telegram_url"
                       target="_blank"
                       rel="noopener"
                     >

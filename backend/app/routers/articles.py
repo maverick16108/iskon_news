@@ -222,8 +222,12 @@ async def list_articles(
             repeat_article_ids=sorted(
                 {e.article_id for e in repeats.get(article.id, []) if e.article_id}
             ),
-            repeat_published=any(
-                e.post_status is PostStatus.published for e in repeats.get(article.id, [])
+            # Вопрос у редактора один: этот сюжет уже уходил в канал или нет.
+            # Ответ даёт и собственный пост карточки, и пост двойника —
+            # у совпадений по адресу карточка вообще одна на всех.
+            repeat_published=(
+                (article.post is not None and article.post.status is PostStatus.published)
+                or any(e.post_status is PostStatus.published for e in repeats.get(article.id, []))
             ),
         )
         for article, source_name, viewed_at in rows

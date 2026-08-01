@@ -399,9 +399,9 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr v-for="channel in platform.channels" :key="channel.id">
-              <td class="mono">{{ channel.chat }}</td>
-              <td>{{ channel.title || '—' }}</td>
-              <td class="wrap">
+              <td class="mono cell-title">{{ channel.chat }}</td>
+              <td data-label="Название">{{ channel.title || '—' }}</td>
+              <td class="wrap" data-label="Права бота">
                 <span
                   class="ws-badge"
                   :class="channel.can_post ? 'healthy' : channel.can_post === false ? 'critical' : 'neutral'"
@@ -418,7 +418,7 @@ onMounted(async () => {
                   {{ channel.last_status }}
                 </div>
               </td>
-              <td class="wrap">
+              <td class="wrap" data-label="Вещаем сюда">
                 <label class="channel-switch">
                   <span class="ui-check" :class="{ 'is-on': channel.is_enabled }">
                     <input
@@ -525,13 +525,13 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr v-for="person in subscribers" :key="person.id">
-              <td>
+              <td class="cell-title">
                 {{ person.full_name || '—' }}
                 <div v-if="person.username" class="muted" style="font-size: 11px">
                   @{{ person.username }}
                 </div>
               </td>
-              <td>
+              <td data-label="Оповещения">
                 <span
                   class="ws-badge"
                   :class="person.is_blocked ? 'critical' : person.notify ? 'healthy' : 'neutral'"
@@ -545,7 +545,7 @@ onMounted(async () => {
                   }}
                 </span>
               </td>
-              <td>{{ formatDate(person.last_notified_at) }}</td>
+              <td data-label="Последняя сводка">{{ formatDate(person.last_notified_at) }}</td>
               <td>
                 <div class="row-actions">
                   <button

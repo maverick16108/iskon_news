@@ -210,7 +210,10 @@ body {
   border-radius: 6px;
 }
 
-/* Ширина панели задаётся переменной и тянется рукояткой */
+/* Ширина панели задаётся переменной и тянется рукояткой.
+   Только на широких экранах: на телефоне тема превращает панель
+   в выдвижную шторку, и липкая колонка фиксированной ширины ей мешает. */
+@media (min-width: 761px) {
 .ui-shell .ui-sidebar {
   width: var(--sidebar-width, 232px);
   min-width: var(--sidebar-width, 232px);
@@ -229,6 +232,7 @@ body {
      и уносила с собой блок профиля. Поэтому делим на масштаб явно. */
   height: calc(100vh / var(--ui-scale, 1));
   max-height: calc(100vh / var(--ui-scale, 1));
+}
 }
 
 /* Пункты меню прокручиваются, профиль остаётся внизу: при крупном
@@ -1790,4 +1794,219 @@ html:not(.kbd-nav) label:focus-within {
 
 .placeholder-chip:hover {
   border-color: var(--scheme-accent, #1768ff);
+}
+
+
+/* --- Мобильная раскладка --------------------------------------------------
+   Тема даёт шторку и кнопку-гамбургер, но остальное рассчитано на широкий
+   экран: таблицы, панели фильтров и двухколоночный редактор. */
+
+/* Затемнение под открытой шторкой: без него непонятно, что страница
+   под ней временно недоступна, а промах мимо панели ничего не делает */
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(9 21 41 / 45%);
+}
+
+@media (min-width: 761px) {
+  .nav-scrim {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  /* Шторка поверх затемнения и содержимого */
+  .ui-shell .ui-sidebar {
+    z-index: 50;
+    width: min(286px, 86vw);
+    min-width: 0;
+  }
+
+  /* Растягивать шторку пальцем незачем */
+  .sidebar-resizer,
+  .sidebar-toggle {
+    display: none;
+  }
+
+  /* Свёрнутое состояние — про узкую колонку на широком экране,
+     на телефоне оно только мешает шторке */
+  .ui-shell.is-collapsed .ui-sidebar {
+    width: min(286px, 86vw);
+  }
+
+  .ui-shell.is-collapsed .ui-brand-copy,
+  .ui-shell.is-collapsed .ui-nav-label,
+  .ui-shell.is-collapsed .ui-profile-copy {
+    display: block;
+  }
+
+  .ui-shell.is-collapsed .ui-nav-link span:not(.nav-icon) {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+  }
+
+  /* Панель фильтров: в строку не помещается, раскладываем по вертикали */
+  .ws-control-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ws-control-bar > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .search-input {
+    flex: 1 0 100%;
+  }
+
+  .row-end {
+    margin-left: 0;
+    flex: 1 1 100%;
+  }
+
+  /* Таблица в семь столбцов на телефоне нечитаема: заголовок сжимается
+     в колонку шириной в слово. Разворачиваем каждую строку в карточку,
+     подписи столбцов берём из data-label — разметка остаётся одна. */
+  .table-wrap {
+    overflow: visible;
+  }
+
+  .ws-table,
+  .ws-table tbody,
+  .ws-table tr,
+  .ws-table td {
+    display: block;
+    width: auto;
+  }
+
+  .ws-table thead {
+    display: none;
+  }
+
+  /* Заголовок в карточке должен идти первым, а в таблице он третьим
+     столбцом. Флексом переставляем, не трогая разметку. */
+  .ws-table tr {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--scheme-border-soft, #e8edf2);
+  }
+
+  .ws-table td.cell-title {
+    order: -1;
+  }
+
+  .ws-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .ws-table td {
+    padding: 3px 0;
+    border: 0;
+    height: auto;
+    /* Длинные адреса рвём по символам: иначе они вылезают за карточку */
+    overflow-wrap: anywhere;
+  }
+
+  /* Подпись и значение в строку, значение не наезжает на подпись */
+  .ws-table td[data-label] {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* Подпись столбца слева от значения */
+  .ws-table td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    width: 96px;
+    padding-top: 1px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--scheme-text-muted, #7b899b);
+  }
+
+  /* Пустые ячейки в карточке только шумят */
+  .ws-table td.is-empty {
+    display: none;
+  }
+
+  /* Заголовок — главное в карточке, показываем его без подписи и крупнее */
+  .ws-table td.cell-title {
+    padding-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .ws-table td.cell-title::before {
+    display: none;
+  }
+
+  .ws-table td.cell-title .title-link {
+    font-size: 14px;
+  }
+
+  /* Действия строкой под содержимым карточки */
+  .ws-table td .row-actions {
+    justify-content: flex-start;
+    margin-top: 6px;
+  }
+
+  /* Полоса непрочитанного через всю карточку слева */
+  .ws-table tbody tr.row-link td:first-child,
+  .ws-table tbody tr.is-unread td:first-child {
+    box-shadow: none;
+  }
+
+  .ws-table tbody tr.is-unread {
+    box-shadow: inset 3px 0 0 var(--scheme-accent, #1768ff);
+  }
+
+  /* Карточки и формы */
+  .ws-surface {
+    max-width: none !important;
+  }
+
+  .ws-surface-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Всплывающие сообщения во всю ширину: узкая колонка справа
+     на телефоне выглядит обрезанной */
+  .toast-stack {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .toast {
+    max-width: none;
+    width: 100%;
+  }
+
+  /* Галерея и календарь */
+  .ui-date-pop {
+    left: auto;
+    right: 0;
+  }
+
+  /* Числовое поле рядом с календарём: во всю ширину оно смотрится
+     как отдельный блок и рвёт фразу «или не старше N дней» */
+  .ws-field input[type='number'] {
+    max-width: 96px !important;
+  }
+
+  .video-card {
+    flex-wrap: wrap;
+  }
+
+  .video-poster {
+    width: 72px;
+    height: 40px;
+  }
 }

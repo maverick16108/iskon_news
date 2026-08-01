@@ -400,12 +400,12 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr v-for="source in sorted" :key="source.id">
-              <td>{{ source.name }}</td>
-              <td class="mono" style="font-size: 12px">{{ source.url }}</td>
-              <td>{{ KIND_LABELS[source.kind] ?? source.kind }}</td>
-              <td>«{{ source.signature_name || source.name }}» {{ source.signature_suffix }}</td>
-              <td>{{ formatDate(source.last_fetched_at) }}</td>
-              <td>
+              <td class="cell-title">{{ source.name }}</td>
+              <td class="mono wrap" style="font-size: 12px" data-label="Адрес">{{ source.url }}</td>
+              <td data-label="Тип">{{ KIND_LABELS[source.kind] ?? source.kind }}</td>
+              <td data-label="Подпись">«{{ source.signature_name || source.name }}» {{ source.signature_suffix }}</td>
+              <td data-label="Последний сбор">{{ formatDate(source.last_fetched_at) }}</td>
+              <td data-label="Промпт">
                 <UiSelect
                   :model-value="source.prompt_template_id ?? ''"
                   :options="promptOptions"
@@ -414,7 +414,7 @@ onMounted(async () => {
                   @update:model-value="changePrompt(source, $event)"
                 />
               </td>
-              <td>
+              <td data-label="Состояние">
                 <span class="ws-badge" :class="source.is_active ? 'healthy' : 'neutral'">
                   {{ source.is_active ? 'Активен' : 'Отключён' }}
                 </span>

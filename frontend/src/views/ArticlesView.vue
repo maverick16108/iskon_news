@@ -26,6 +26,10 @@ import {
 
 const PAGE_SIZE = 50
 
+// Насколько заранее просим следующую порцию. Полтора экрана: за это время
+// запрос успевает вернуться, и прокрутка не упирается в пустоту.
+const PRELOAD_MARGIN_PX = 1500
+
 const router = useRouter()
 const route = useRoute()
 
@@ -95,23 +99,7 @@ function buildParams(offset: number) {
   return params
 }
 
-/** Первая страница: список сбрасывается. */
-async function load() {
-  loading.value = true
-  exhausted.value = false
-  error.value = ''
-  try {
-    const page = await api.get<ArticleListItem[]>(`/api/articles?${buildParams(0)}`)
-    articles.value = page
-    exhausted.value = page.length < PAGE_SIZE
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось загрузить ленту'
-  } finally {
-    loading.value = false
-  }
-}
-
-/** Следующая порция — по мере прокрутки. */
+/** Следующая порция — по мере прокрутки и заранее. */
 async function loadMore() {
   if (loading.value || loadingMore.value || exhausted.value) return
 
@@ -129,6 +117,26 @@ async function loadMore() {
   } finally {
     loadingMore.value = false
   }
+}
+
+/** Первая страница: список сбрасывается. */
+async function load() {
+  loading.value = true
+  exhausted.value = false
+  error.value = ''
+  try {
+    const page = await api.get<ArticleListItem[]>(`/api/articles?${buildParams(0)}`)
+    articles.value = page
+    exhausted.value = page.length < PAGE_SIZE
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось загрузить ленту'
+  } finally {
+    loading.value = false
+  }
+
+  // Держим одну порцию про запас: к моменту, когда читатель до неё
+  // доскроллит, она уже будет на месте
+  void loadMore()
 }
 
 /** Клик по любому месту строки открывает новость. */
@@ -294,7 +302,7 @@ onMounted(async () => {
     (entries) => {
       if (entries.some((entry) => entry.isIntersecting)) loadMore()
     },
-    { rootMargin: '400px' },
+    { rootMargin: `${PRELOAD_MARGIN_PX}px` },
   )
   if (sentinel.value) observer.observe(sentinel.value)
 
@@ -422,12 +430,14 @@ watch([sourceFilter, statusFilter, includeArchive], load)
               @auxclick="openArticle(article, $event)"
               @keydown.enter="openArticle(article, $event)"
             >
-              <td class="nowrap">
+              <td class="nowrap" data-label="Добавлена">
                 <span class="unread-dot" aria-hidden="true" />
                 {{ formatDate(article.fetched_at) }}
               </td>
-              <td class="muted nowrap">{{ formatDateShort(article.published_at) }}</td>
-              <td class="wrap">
+              <td class="muted nowrap" data-label="Дата новости">
+                {{ formatDateShort(article.published_at) }}
+              </td>
+              <td class="wrap cell-title">
                 <RouterLink
                   class="title-link"
                   :to="{ name: 'article', params: { id: article.id } }"
@@ -465,21 +475,21 @@ watch([sourceFilter, statusFilter, includeArchive], load)
                   :class="{ 'is-published': article.repeat_published }"
                   :title="
                     article.repeat_published
-                      ? `Этот сюжет уже публиковали в другой карточке. Источники: ${article.repeat_sources.join(', ')}`
-                      : `Этот же сюжет есть в источниках: ${article.repeat_sources.join(', ')}`
+                      ? `Этот сюжет уже уходил в канал. Он есть в источниках: ${article.repeat_sources.join(', ')}`
+                      : `Этот же сюжет есть в источниках: ${article.repeat_sources.join(', ')}. В канал ещё не уходил.`
                   "
                 >
-                  повтор{{ article.repeat_published ? ', уже опубликован' : '' }} ·
+                  повтор{{ article.repeat_published ? ', опубликован' : '' }} ·
                   {{ article.repeat_sources.join(', ') }}
                 </span>
               </td>
-              <td>{{ article.source_name }}</td>
-              <td>
+              <td data-label="Источник">{{ article.source_name }}</td>
+              <td data-label="Исходник">
                 <span class="ws-badge" :class="QUALITY_TONE[article.content_quality]">
                   {{ QUALITY_LABELS[article.content_quality] }}
                 </span>
               </td>
-              <td>
+              <td data-label="Пост">
                 <span
                   v-if="article.post_status"
                   class="ws-badge"
@@ -499,7 +509,7 @@ watch([sourceFilter, statusFilter, includeArchive], load)
                 </span>
                 <span v-else class="muted">—</span>
               </td>
-              <td class="num">
+              <td class="num" data-label="Символов" :class="{ 'is-empty': article.post_char_count === null }">
                 <span
                   v-if="article.post_char_count !== null"
                   class="char-counter"
