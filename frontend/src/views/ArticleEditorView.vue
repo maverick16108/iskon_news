@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { MAX_POST_CHARS, api, type ArticleDetail, type ArticleImage, type Post } from '@/api'
+import NavIcon from '@/components/NavIcon.vue'
 import { POST_STATUS_LABELS, POST_STATUS_TONE, QUALITY_LABELS, QUALITY_TONE, formatDate } from '@/labels'
 
 const route = useRoute()
@@ -175,6 +176,82 @@ async function toggleImage(image: ArticleImage) {
   }
 }
 
+// --- Свои фотографии ------------------------------------------------------
+
+const dropActive = ref(false)
+const uploading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+// Счётчик нужен, потому что dragleave срабатывает и при переходе
+// между дочерними элементами зоны
+let dragDepth = 0
+
+async function uploadFiles(files: FileList | File[] | null) {
+  const list = Array.from(files ?? []).filter((file) => file.type.startsWith('image/'))
+  if (!list.length) {
+    error.value = 'Перетащите изображения — другие файлы не подойдут'
+    return
+  }
+
+  uploading.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const body = new FormData()
+    list.forEach((file) => body.append('files', file))
+
+    // FormData несёт свой Content-Type с границей, поэтому обычную обёртку
+    // api.post здесь не используем — она навязывает application/json.
+    const response = await fetch(`/api/articles/${articleId}/images`, {
+      method: 'POST',
+      credentials: 'include',
+      body,
+    })
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null)
+      throw new Error(detail?.detail ?? `Ошибка ${response.status}`)
+    }
+
+    article.value = await api.get<ArticleDetail>(`/api/articles/${articleId}`)
+    notice.value = `Добавлено фотографий: ${list.length}`
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось загрузить'
+  } finally {
+    uploading.value = false
+    dropActive.value = false
+    dragDepth = 0
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
+
+function onDrop(event: DragEvent) {
+  dragDepth = 0
+  dropActive.value = false
+  uploadFiles(event.dataTransfer?.files ?? null)
+}
+
+function onDragEnter() {
+  dragDepth += 1
+  dropActive.value = true
+}
+
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (!dragDepth) dropActive.value = false
+}
+
+async function removeImage(image: ArticleImage) {
+  if (!confirm('Убрать эту фотографию из статьи?')) return
+  error.value = ''
+  try {
+    await api.delete(`/api/articles/${articleId}/images/${image.id}`)
+    if (article.value) {
+      article.value.images = article.value.images.filter((i) => i.id !== image.id)
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось убрать фотографию'
+  }
+}
+
 async function copyImageLinks() {
   // Копируем исходные адреса — они пригодятся при ручной публикации.
   // Локальные копии остаются у нас на случай, если источник их удалит.
@@ -318,39 +395,82 @@ onMounted(async () => {
               <input v-model="draft.signature" class="ws-input" placeholder="«ISKCON News» website" />
             </div>
 
-            <div v-if="article.images.length" class="ws-field">
+            <div class="ws-field">
               <label class="ws-field-label">
-                Фотографии из новости — отметьте те, что пойдут в пост
-                <span class="muted"> ({{ selectedImages.length }} из {{ article.images.length }})</span>
-              </label>
-              <div class="gallery">
-                <button
-                  v-for="image in article.images"
-                  :key="image.id"
-                  type="button"
-                  class="gallery-item"
-                  :class="{ 'is-selected': image.is_selected }"
-                  :aria-pressed="image.is_selected"
-                  @click="toggleImage(image)"
+                Фотографии — отметьте те, что пойдут в пост
+                <span class="muted">
+                  ({{ selectedImages.length }} из {{ article.images.length }})</span
                 >
-                  <!-- Файл берём у себя, а не по прямой ссылке: источник
-                       закрыт Cloudflare и отдаёт 403 в том числе на картинки -->
-                  <img
-                    class="gallery-thumb"
-                    :src="`/api/articles/${articleId}/images/${image.id}/raw`"
-                    :alt="image.caption_ru || image.caption || ''"
-                    loading="lazy"
-                  />
-                  <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">✓</span>
-                  <span class="gallery-caption">
-                    {{ image.caption_ru || image.caption || 'Без подписи' }}
-                    <span
-                      v-if="image.caption_ru && image.caption"
-                      class="gallery-caption-original"
-                      >{{ image.caption }}</span
+              </label>
+              <div>
+                <div v-if="article.images.length" class="gallery" style="margin-bottom: 10px">
+                  <div
+                    v-for="image in article.images"
+                    :key="image.id"
+                    class="gallery-item"
+                    :class="{ 'is-selected': image.is_selected }"
+                    role="button"
+                    tabindex="0"
+                    :aria-pressed="image.is_selected"
+                    @click="toggleImage(image)"
+                    @keydown.enter.prevent="toggleImage(image)"
+                    @keydown.space.prevent="toggleImage(image)"
+                  >
+                    <!-- Файл берём у себя, а не по прямой ссылке: источник
+                         закрыт Cloudflare и отдаёт 403 в том числе на картинки -->
+                    <img
+                      class="gallery-thumb"
+                      :src="`/api/articles/${articleId}/images/${image.id}/raw`"
+                      :alt="image.caption_ru || image.caption || ''"
+                      loading="lazy"
+                    />
+                    <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">✓</span>
+                    <button
+                      type="button"
+                      class="gallery-remove"
+                      title="Убрать фотографию"
+                      @click.stop="removeImage(image)"
                     >
+                      ×
+                    </button>
+                    <span v-if="image.is_uploaded" class="gallery-badge">своя</span>
+                    <span class="gallery-caption">
+                      {{ image.caption_ru || image.caption || 'Без подписи' }}
+                      <span
+                        v-if="image.caption_ru && image.caption"
+                        class="gallery-caption-original"
+                        >{{ image.caption }}</span
+                      >
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  class="dropzone"
+                  :class="{ 'is-over': dropActive, 'is-busy': uploading }"
+                  role="button"
+                  tabindex="0"
+                  @click="fileInput?.click()"
+                  @keydown.enter.prevent="fileInput?.click()"
+                  @dragenter.prevent="onDragEnter"
+                  @dragover.prevent
+                  @dragleave.prevent="onDragLeave"
+                  @drop.prevent="onDrop"
+                >
+                  <NavIcon name="upload" style="width: 22px; height: 22px" />
+                  <span v-if="uploading">Загружаем…</span>
+                  <span v-else>
+                    Перетащите свои фотографии сюда или нажмите, чтобы выбрать
                   </span>
-                </button>
+                </div>
+                <input
+                  ref="fileInput"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/avif"
+                  multiple
+                  hidden
+                  @change="uploadFiles(($event.target as HTMLInputElement).files)"
+                />
               </div>
             </div>
 

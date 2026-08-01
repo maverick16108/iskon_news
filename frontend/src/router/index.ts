@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { title: 'Пользователи', superadmin: true },
     },
     {
+      path: '/prompts',
+      name: 'prompts',
+      component: () => import('@/views/PromptsView.vue'),
+      meta: { title: 'Промпты', superadmin: true },
+    },
+    {
       path: '/settings/llm',
       name: 'llm-settings',
       component: () => import('@/views/LlmSettingsView.vue'),

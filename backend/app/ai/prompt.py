@@ -41,7 +41,7 @@ BBT / Bhaktivedanta Book Trust — ББТ, «Бхактиведанта Бук �
 GBC — Джи-Би-Си\
 """
 
-SYSTEM_PROMPT = f"""\
+DEFAULT_TEMPLATE = """\
 Ты — редактор новостного телеграм-канала «Новости ИСККОН» (t.me/iskconru).
 Получаешь статью на английском языке и делаешь из неё пост для канала на русском.
 
@@ -77,16 +77,45 @@ SYSTEM_PROMPT = f"""\
 Придумывать новые теги нельзя. Если ничего не подходит — верни пустой список.
 
 Доступные теги:
-{prompt_hashtag_list()}
+{hashtags}
 
 ГЛОССАРИЙ
-{GLOSSARY}
+{glossary}\
+"""
+
+# Договор о формате ответа. Не редактируется через интерфейс: если его
+# испортить, перестанет разбираться JSON и генерация встанет целиком.
+# Дописывается к любому шаблону автоматически.
+FORMAT_CONTRACT = """\
 
 ФОРМАТ ОТВЕТА
 Строгий JSON, без markdown-обёртки:
-{{"hashtags": ["#тег"], "title": "Заголовок", "body": "Абзац.\\n\\nАбзац."}}
+{"hashtags": ["#тег"], "title": "Заголовок", "body": "Абзац.\\n\\nАбзац."}
 В body не вставляй ни хэштеги, ни заголовок, ни подпись — их добавит система.\
 """
+
+# Что можно подставить в шаблон. Показывается редактору как подсказка.
+PLACEHOLDERS: dict[str, str] = {
+    "{hashtags}": "список хэштегов канала с пояснениями, когда какой ставить",
+    "{glossary}": "глоссарий вайшнавских терминов на русском",
+    "{max_chars}": f"предельная длина поста ({MAX_POST_CHARS})",
+}
+
+
+def render_system_prompt(template: str | None = None) -> str:
+    """Собирает системный промпт из шаблона.
+
+    Плейсхолдеры подставляются, договор о формате дописывается всегда —
+    даже если редактор его из шаблона убрал.
+    """
+    text = (template or DEFAULT_TEMPLATE).replace("{hashtags}", prompt_hashtag_list())
+    text = text.replace("{glossary}", GLOSSARY)
+    text = text.replace("{max_chars}", str(MAX_POST_CHARS))
+    return text.rstrip() + "\n" + FORMAT_CONTRACT
+
+
+# Промпт по умолчанию — на случай, если в базе шаблонов ещё нет
+SYSTEM_PROMPT = render_system_prompt()
 
 
 def build_user_prompt(

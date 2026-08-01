@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { api, type FetchResult, type Source } from '@/api'
+import { api, type FetchResult, type PromptTemplate, type Source } from '@/api'
 import TableSkeleton from '@/components/TableSkeleton.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
@@ -11,13 +11,14 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 
 const sources = ref<Source[]>([])
+const prompts = ref<PromptTemplate[]>([])
 const loading = ref(true)
 const busyId = ref<number | null>(null)
 const error = ref('')
 const notice = ref('')
 const showForm = ref(false)
 
-type SortKey = 'name' | 'url' | 'signature' | 'fetched' | 'state'
+type SortKey = 'name' | 'url' | 'signature' | 'fetched' | 'prompt' | 'state'
 const sortKey = ref<SortKey>('name')
 const sortAsc = ref(true)
 
@@ -26,6 +27,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'url', label: 'Адрес' },
   { key: 'signature', label: 'Подпись' },
   { key: 'fetched', label: 'Последний сбор' },
+  { key: 'prompt', label: 'Промпт' },
   { key: 'state', label: 'Состояние' },
 ]
 
@@ -42,7 +44,14 @@ const form = reactive({
   signature_name: '',
   signature_suffix: 'website',
   fetch_interval_minutes: 60,
+  prompt_template_id: '' as number | '',
 })
+
+// Пустое значение означает «шаблон по умолчанию»
+const promptOptions = computed<SelectOption[]>(() => [
+  { value: '', label: 'Шаблон по умолчанию' },
+  ...prompts.value.map((p) => ({ value: p.id, label: p.name, hint: p.description ?? undefined })),
+])
 
 function sortValue(source: Source, key: SortKey): string | number {
   switch (key) {
@@ -54,6 +63,8 @@ function sortValue(source: Source, key: SortKey): string | number {
       return (source.signature_name || source.name).toLowerCase()
     case 'fetched':
       return source.last_fetched_at ? Date.parse(source.last_fetched_at) : 0
+    case 'prompt':
+      return (source.prompt_template_name ?? '').toLowerCase()
     case 'state':
       return source.is_active ? 1 : 0
   }
@@ -101,6 +112,7 @@ async function create() {
     await api.post<Source>('/api/sources', {
       ...form,
       signature_name: form.signature_name || null,
+      prompt_template_id: form.prompt_template_id === '' ? null : form.prompt_template_id,
     })
     notice.value = `Источник «${form.name}» добавлен`
     Object.assign(form, {
@@ -109,6 +121,7 @@ async function create() {
       signature_name: '',
       signature_suffix: 'website',
       fetch_interval_minutes: 60,
+      prompt_template_id: '',
     })
     showForm.value = false
     await load()
@@ -152,7 +165,28 @@ async function remove(source: Source) {
   }
 }
 
-onMounted(load)
+async function changePrompt(source: Source, value: string | number) {
+  error.value = ''
+  try {
+    await api.patch<Source>(`/api/sources/${source.id}`, {
+      prompt_template_id: value === '' ? null : value,
+    })
+    notice.value = `Шаблон для «${source.name}» изменён`
+    await load()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось назначить шаблон'
+    await load()
+  }
+}
+
+onMounted(async () => {
+  try {
+    prompts.value = await api.get<PromptTemplate[]>('/api/prompts')
+  } catch {
+    // список шаблонов не критичен для экрана источников
+  }
+  await load()
+})
 </script>
 
 <template>
@@ -210,6 +244,14 @@ onMounted(load)
           </div>
         </div>
         <div class="ws-field">
+          <label class="ws-field-label">Шаблон промпта</label>
+          <div>
+            <UiSelect v-model="form.prompt_template_id" :options="promptOptions" />
+            <small class="muted">По нему новости этого источника переводятся в пост.</small>
+          </div>
+        </div>
+
+        <div class="ws-field">
           <label class="ws-field-label">Как часто проверять, минут</label>
           <input
             v-model.number="form.fetch_interval_minutes"
@@ -228,7 +270,7 @@ onMounted(load)
     <section class="ws-surface">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Источники</h2></div>
 
-      <TableSkeleton v-if="loading" :columns="[20, 30, 20, 18, 12, 10]" :rows="4" />
+      <TableSkeleton v-if="loading" :columns="[18, 26, 18, 14, 14, 10, 10]" :rows="4" />
       <div v-else-if="!sources.length" class="empty-state">Источники ещё не добавлены.</div>
 
       <div v-else class="table-wrap">
@@ -260,6 +302,15 @@ onMounted(load)
               <td class="mono" style="font-size: 12px">{{ source.url }}</td>
               <td>«{{ source.signature_name || source.name }}» {{ source.signature_suffix }}</td>
               <td>{{ formatDate(source.last_fetched_at) }}</td>
+              <td>
+                <UiSelect
+                  :model-value="source.prompt_template_id ?? ''"
+                  :options="promptOptions"
+                  :disabled="!auth.isSuperadmin"
+                  small
+                  @update:model-value="changePrompt(source, $event)"
+                />
+              </td>
               <td>
                 <span class="ws-badge" :class="source.is_active ? 'healthy' : 'neutral'">
                   {{ source.is_active ? 'Активен' : 'Отключён' }}

@@ -79,6 +79,9 @@ export interface Source {
   last_fetched_at: string | null
   last_error: string | null
   created_at: string
+  /** Пусто — применяется шаблон по умолчанию */
+  prompt_template_id: number | null
+  prompt_template_name: string | null
 }
 
 export interface Post {
@@ -115,7 +118,9 @@ export interface Article {
 
 export interface ArticleImage {
   id: number
-  url: string
+  /** У загруженных редактором адреса нет */
+  url: string | null
+  is_uploaded: boolean
   caption: string | null
   caption_ru: string | null
   width: number | null
@@ -155,6 +160,28 @@ export interface FetchResult {
   added: number
   with_full_text: number
   images: number
+}
+
+export interface PromptTemplate {
+  id: number
+  name: string
+  description: string | null
+  body: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
+  updated_by: string | null
+  used_by_sources: number
+}
+
+export interface PromptPreview {
+  rendered: string
+  chars: number
+}
+
+export interface PlaceholderInfo {
+  token: string
+  description: string
 }
 
 export interface LlmSettings {

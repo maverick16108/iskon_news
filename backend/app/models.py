@@ -83,6 +83,12 @@ class Source(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    # Свой шаблон промпта. Пусто — берётся шаблон по умолчанию.
+    prompt_template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("prompt_templates.id", ondelete="SET NULL")
+    )
+    prompt_template: Mapped[PromptTemplate | None] = relationship(back_populates="sources")
+
     articles: Mapped[list[Article]] = relationship(back_populates="source", cascade="all, delete-orphan")
 
     @property
@@ -153,7 +159,11 @@ class ArticleImage(Base):
     article_id: Mapped[int] = mapped_column(ForeignKey("articles.id", ondelete="CASCADE"), index=True)
     article: Mapped[Article] = relationship(back_populates="images")
 
-    url: Mapped[str] = mapped_column(String(1024))
+    # У картинки из новости есть адрес на сайте источника; у загруженной
+    # редактором — нет, вместо него имя файла в local_file.
+    url: Mapped[str | None] = mapped_column(String(1024))
+    local_file: Mapped[str | None] = mapped_column(String(255))
+
     caption: Mapped[str | None] = mapped_column(Text)      # как в оригинале
     caption_ru: Mapped[str | None] = mapped_column(Text)   # перевод
     width: Mapped[int | None] = mapped_column(Integer)
@@ -162,6 +172,9 @@ class ArticleImage(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     # Пойдёт ли картинка в пост. Первую выбираем автоматически.
     is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Загружена редактором вручную, а не взята из новости
+    is_uploaded: Mapped[bool] = mapped_column(Boolean, default=False)
+    uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
 
 # --------------------------------------------------------------------------
@@ -230,6 +243,39 @@ class Post(Base):
     @property
     def is_within_limit(self) -> bool:
         return self.char_count <= MAX_POST_CHARS
+
+
+# --------------------------------------------------------------------------
+# Шаблоны промптов
+# --------------------------------------------------------------------------
+
+class PromptTemplate(Base):
+    """Инструкция для модели, по которой новость превращается в пост.
+
+    Шаблон редактируется через интерфейс и назначается источнику: у разных
+    сайтов бывает разный характер материалов. Блок с форматом ответа в шаблон
+    не входит — его дописывает сервер, иначе неудачная правка сломала бы
+    разбор JSON и генерация встала бы целиком.
+    """
+
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    description: Mapped[str | None] = mapped_column(String(512))
+    body: Mapped[str] = mapped_column(Text)
+
+    # Применяется к источникам, которым свой шаблон не назначен
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by: Mapped[User | None] = relationship()
+
+    sources: Mapped[list[Source]] = relationship(back_populates="prompt_template")
 
 
 # --------------------------------------------------------------------------

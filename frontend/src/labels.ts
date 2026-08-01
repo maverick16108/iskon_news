@@ -54,6 +54,11 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'article.delete': 'Удалена статья',
   'image.update': 'Изменён выбор фото',
   'llm.update': 'Изменены настройки модели',
+  'image.upload': 'Загружены фотографии',
+  'image.delete': 'Удалена фотография',
+  'prompt.create': 'Создан шаблон промпта',
+  'prompt.update': 'Изменён шаблон промпта',
+  'prompt.delete': 'Удалён шаблон промпта',
 }
 
 export function formatDate(value: string | null): string {

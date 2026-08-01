@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { api, type ArticleListItem, type FetchResult, type PostStatus, type Source } from '@/api'
+import NavIcon from '@/components/NavIcon.vue'
 import TableSkeleton from '@/components/TableSkeleton.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
@@ -13,9 +14,13 @@ import {
   formatDateShort,
 } from '@/labels'
 
+const PAGE_SIZE = 50
+
 const articles = ref<ArticleListItem[]>([])
 const sources = ref<Source[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const exhausted = ref(false)
 const fetching = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -24,6 +29,9 @@ const search = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
 const sourceFilter = ref<number | ''>('')
 const statusFilter = ref<PostStatus | '' | 'none'>('')
+
+const sentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
 
 type SortKey = 'published' | 'fetched' | 'title' | 'source' | 'quality' | 'post' | 'chars'
 const sortKey = ref<SortKey>('published')
@@ -50,37 +58,55 @@ const COLUMNS: { key: SortKey; label: string; title?: string; numeric?: boolean 
   { key: 'chars', label: 'Символов', numeric: true },
 ]
 
-// Сортируем на клиенте: страница отдаёт не больше 100 записей,
-// гонять запрос на сервер ради смены порядка незачем.
-function sortValue(article: ArticleListItem, key: SortKey): string | number {
-  switch (key) {
-    case 'title':
-      return article.title.toLowerCase()
-    case 'source':
-      return article.source_name.toLowerCase()
-    case 'published':
-      return article.published_at ? Date.parse(article.published_at) : 0
-    case 'fetched':
-      return Date.parse(article.fetched_at)
-    case 'quality':
-      return article.content_quality
-    case 'post':
-      return article.post_status ?? ''
-    case 'chars':
-      return article.post_char_count ?? -1
+function buildParams(offset: number) {
+  const params = new URLSearchParams({
+    limit: String(PAGE_SIZE),
+    offset: String(offset),
+    sort: sortKey.value,
+    order: sortAsc.value ? 'asc' : 'desc',
+  })
+  if (search.value.trim()) params.set('search', search.value.trim())
+  if (sourceFilter.value !== '') params.set('source_id', String(sourceFilter.value))
+  if (statusFilter.value === 'none') params.set('only_unprocessed', 'true')
+  else if (statusFilter.value !== '') params.set('status', statusFilter.value)
+  return params
+}
+
+/** Первая страница: список сбрасывается. */
+async function load() {
+  loading.value = true
+  exhausted.value = false
+  error.value = ''
+  try {
+    const page = await api.get<ArticleListItem[]>(`/api/articles?${buildParams(0)}`)
+    articles.value = page
+    exhausted.value = page.length < PAGE_SIZE
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось загрузить ленту'
+  } finally {
+    loading.value = false
   }
 }
 
-const sorted = computed(() => {
-  const factor = sortAsc.value ? 1 : -1
-  return [...articles.value].sort((a, b) => {
-    const left = sortValue(a, sortKey.value)
-    const right = sortValue(b, sortKey.value)
-    if (left === right) return 0
-    if (typeof left === 'number' && typeof right === 'number') return (left - right) * factor
-    return String(left).localeCompare(String(right), 'ru') * factor
-  })
-})
+/** Следующая порция — по мере прокрутки. */
+async function loadMore() {
+  if (loading.value || loadingMore.value || exhausted.value) return
+
+  loadingMore.value = true
+  try {
+    const page = await api.get<ArticleListItem[]>(
+      `/api/articles?${buildParams(articles.value.length)}`,
+    )
+    // Сортировка и постраничность живут на сервере, поэтому просто дописываем
+    articles.value = [...articles.value, ...page]
+    if (page.length < PAGE_SIZE) exhausted.value = true
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось догрузить ленту'
+    exhausted.value = true
+  } finally {
+    loadingMore.value = false
+  }
+}
 
 function toggleSort(key: SortKey) {
   if (sortKey.value === key) {
@@ -88,31 +114,14 @@ function toggleSort(key: SortKey) {
   } else {
     sortKey.value = key
     // Даты и числа удобнее сразу видеть по убыванию, текст — по алфавиту
-    sortAsc.value = !['published', 'fetched', 'chars'].includes(key)
+    sortAsc.value = !['published', 'fetched', 'chars', 'post'].includes(key)
   }
+  load()
 }
 
 function ariaSort(key: SortKey) {
   if (sortKey.value !== key) return 'none'
   return sortAsc.value ? 'ascending' : 'descending'
-}
-
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    const params = new URLSearchParams({ limit: '100' })
-    if (search.value.trim()) params.set('search', search.value.trim())
-    if (sourceFilter.value !== '') params.set('source_id', String(sourceFilter.value))
-    if (statusFilter.value === 'none') params.set('only_unprocessed', 'true')
-    else if (statusFilter.value !== '') params.set('status', statusFilter.value)
-
-    articles.value = await api.get<ArticleListItem[]>(`/api/articles?${params}`)
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось загрузить ленту'
-  } finally {
-    loading.value = false
-  }
 }
 
 async function fetchAll() {
@@ -166,6 +175,15 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
 onMounted(async () => {
   document.addEventListener('keydown', onGlobalKeydown)
+
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore()
+    },
+    { rootMargin: '400px' },
+  )
+  if (sentinel.value) observer.observe(sentinel.value)
+
   try {
     sources.value = await api.get<Source[]>('/api/sources')
   } catch {
@@ -174,7 +192,15 @@ onMounted(async () => {
   await load()
 })
 
-onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onGlobalKeydown)
+  observer?.disconnect()
+})
+
+// Наблюдатель вешаем, когда маячок появился в разметке
+watch(sentinel, (element) => {
+  if (element && observer) observer.observe(element)
+})
 
 let debounce: ReturnType<typeof setTimeout>
 watch(search, () => {
@@ -245,7 +271,7 @@ watch([sourceFilter, statusFilter], load)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="article in sorted" :key="article.id">
+            <tr v-for="article in articles" :key="article.id">
               <td>{{ formatDateShort(article.published_at) }}</td>
               <td class="muted">{{ formatDateShort(article.fetched_at) }}</td>
               <td class="wrap">
@@ -255,8 +281,13 @@ watch([sourceFilter, statusFilter], load)
                 >
                   {{ article.title }}
                 </RouterLink>
-                <span v-if="article.image_count" class="photo-count" :title="`Фотографий: ${article.image_count}`">
-                  🖼 {{ article.image_count }}
+                <span
+                  v-if="article.image_count"
+                  class="photo-count"
+                  :title="`Фотографий: ${article.image_count}`"
+                >
+                  <NavIcon name="photo" class="photo-count-icon" />
+                  {{ article.image_count }}
                 </span>
               </td>
               <td>{{ article.source_name }}</td>
@@ -288,6 +319,12 @@ watch([sourceFilter, statusFilter], load)
             </tr>
           </tbody>
         </table>
+
+        <!-- Маячок подгрузки: попал в поле зрения — тянем следующую порцию -->
+        <div ref="sentinel" class="load-more">
+          <span v-if="loadingMore" class="skeleton skeleton-text" style="width: 180px" />
+          <span v-else-if="exhausted" class="muted">Это все новости</span>
+        </div>
       </div>
     </section>
   </div>

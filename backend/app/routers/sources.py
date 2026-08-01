@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbDep, SuperAdmin, write_audit
 from app.models import Source
@@ -17,8 +18,16 @@ router = APIRouter(prefix="/api/sources", tags=["sources"])
 
 @router.get("", response_model=list[SourceOut])
 async def list_sources(db: DbDep, user: CurrentUser):
-    result = await db.scalars(select(Source).order_by(Source.created_at))
-    return list(result)
+    rows = await db.scalars(
+        select(Source).options(selectinload(Source.prompt_template)).order_by(Source.created_at)
+    )
+    return [
+        SourceOut(
+            **{c.name: getattr(row, c.name) for c in Source.__table__.columns},
+            prompt_template_name=row.prompt_template.name if row.prompt_template else None,
+        )
+        for row in rows
+    ]
 
 
 @router.post("", response_model=SourceOut, status_code=status.HTTP_201_CREATED)

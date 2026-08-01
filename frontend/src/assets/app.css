@@ -1,5 +1,6 @@
 /* Дополнения к теме UIUIDS под задачи этого проекта.
-   Всё построено на её же токенах, чтобы не разъезжалось с дизайн-системой. */
+   Цвета берём только из переменных схемы (--scheme-*), иначе тёмная тема
+   разъезжается: у темы светлые значения зашиты в компонентах напрямую. */
 
 body {
   min-width: 0; /* тема ставит 1080px; нам нужен нормальный ресайз */
@@ -9,54 +10,14 @@ body {
   min-height: 100vh;
 }
 
-/* --- Размер шрифта и масштаб интерфейса ----------------------------------
-   Тема задаёт размеры в пикселях, поэтому масштабировать текст через
-   font-size у html бесполезно. Зато почти вся типографика сидит на пяти
-   токенах — их и множим. Остальное дописано ниже поимённо. */
+/* --- Масштаб интерфейса ---------------------------------------------------
+   Один регулятор на всё: zoom увеличивает и текст, и отступы, и контролы. */
 
 :root {
-  --font-scale: 1;
   --ui-scale: 1;
+  --font-scale: 1; /* оставлено для формул ниже, меняется вместе с масштабом */
 }
 
-.workspace-body,
-.login-screen {
-  --ui-body: calc(12px * var(--font-scale));
-  --ui-meta: calc(11px * var(--font-scale));
-  --ui-micro: calc(10px * var(--font-scale));
-  --ui-section-title: calc(14px * var(--font-scale));
-  --ui-page-title: calc(24px * var(--font-scale));
-}
-
-/* Размеры, зашитые в тему мимо токенов */
-.workspace-body .ws-table th {
-  font-size: calc(10px * var(--font-scale));
-}
-
-.workspace-body .ws-table td,
-.workspace-body .ws-input,
-.workspace-body .ws-select,
-.workspace-body .ui-select,
-.workspace-body .ws-btn,
-.workspace-body .ui-nav-link,
-.workspace-body .ws-field-label,
-.workspace-body .ui-brand-copy,
-.login-card .ws-input,
-.login-card .ws-btn,
-.login-card .ws-field-label {
-  font-size: calc(12px * var(--font-scale));
-}
-
-.workspace-body .ws-surface-title {
-  font-size: calc(14px * var(--font-scale));
-}
-
-.workspace-body .ws-badge {
-  font-size: calc(11px * var(--font-scale));
-}
-
-/* Масштаб всего интерфейса. zoom, а не transform: scale — он не ломает
-   раскладку и корректно влияет на прокрутку и позиционирование. */
 .ui-shell {
   zoom: var(--ui-scale);
 }
@@ -67,17 +28,17 @@ body {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: var(--s6, 24px);
-  background: var(--canvas, #f4f6f7);
+  padding: 24px;
+  background: var(--scheme-canvas, #f4f6f7);
 }
 
 .login-card {
   width: min(420px, 100%);
-  background: #fff;
-  border: 1px solid #dce3eb;
+  background: var(--scheme-surface-raised, #fff);
+  border: 1px solid var(--scheme-border, #dce3eb);
   border-radius: 12px;
   padding: 32px;
-  box-shadow: 0 8px 24px rgba(20, 30, 40, 0.08);
+  box-shadow: 0 8px 24px var(--scheme-shadow, rgba(20, 30, 40, 0.08));
 }
 
 .login-brand {
@@ -87,27 +48,16 @@ body {
   margin-bottom: 24px;
 }
 
-.login-brand .ui-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: #10233f;
-  color: #fff;
-  font-weight: 700;
-  font-size: 14px;
-}
-
 .login-title {
   font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.02em;
+  color: var(--scheme-text, #18304e);
 }
 
 .login-subtitle {
   font-size: 13px;
-  color: #6b7785;
+  color: var(--scheme-text-muted, #6b7785);
 }
 
 /* --- Общее --------------------------------------------------------------- */
@@ -137,337 +87,125 @@ body {
 }
 
 .alert-error {
-  background: #fdf0ee;
-  border-color: #f0c4bd;
-  color: #a33a29;
+  background: var(--scheme-danger-soft, #fdf0ee);
+  border-color: var(--scheme-danger, #d96555);
+  color: var(--scheme-danger, #a33a29);
 }
 
 .alert-success {
-  background: #eef7f1;
-  border-color: #bcdcc8;
-  color: #2c6b45;
+  background: var(--scheme-success-soft, #eef7f1);
+  border-color: var(--scheme-success, #3fa36c);
+  color: var(--scheme-success, #2c6b45);
 }
 
 .alert-info {
-  background: #eff5fd;
-  border-color: #c3d8f2;
-  color: #2d5788;
+  background: var(--scheme-info-soft, #eff5fd);
+  border-color: var(--scheme-info, #3b82f6);
+  color: var(--scheme-info, #2d5788);
 }
 
-/* --- Редактор поста ------------------------------------------------------ */
+/* --- Боковая панель ------------------------------------------------------ */
 
-.editor-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
+.nav-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  opacity: 0.75;
 }
 
-@media (max-width: 1100px) {
-  .editor-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* Тема раскладывает .ws-field сеткой «подпись слева, поле справа» — это хорошо
-   для широких форм, но в узкой карточке входа и в колонке редактора поля
-   съезжают. Здесь возвращаем вертикальную раскладку. */
-.login-card .ws-field,
-.editor-grid .ws-field {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  margin-bottom: 0;
-}
-
-.login-card .ws-field-label,
-.editor-grid .ws-field-label {
-  padding-top: 0;
-}
-
-/* Список доступных тегов длинный — держим его компактным,
-   иначе он выдавливает заголовок и текст поста за пределы экрана. */
-.tag-picker {
+.ui-nav-link {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 92px;
-  overflow-y: auto;
-  padding: 8px;
-  border: 1px solid #e3e9f0;
-  border-radius: 8px;
-  background: #fbfcfd;
-}
-
-.tag-picker .ws-chip {
-  cursor: pointer;
-}
-
-.tag-picker .ws-chip.is-active {
-  outline: 2px solid var(--blue, #3b82f6);
-  outline-offset: 1px;
-}
-
-.post-preview {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 14px;
-  line-height: 1.5;
-  background: #fbfcfd;
-  border: 1px solid #e3e9f0;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.post-preview b {
-  font-weight: 650;
-}
-
-.char-counter {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.char-counter.over {
-  color: #c0392b;
-}
-
-.char-counter.near {
-  color: #b8860b;
-}
-
-.char-counter.ok {
-  color: #2c6b45;
-}
-
-.source-text {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 13px;
-  line-height: 1.55;
-  max-height: 460px;
-  overflow-y: auto;
-  color: #35414f;
-}
-
-textarea.ws-input {
-  min-height: 220px;
-  resize: vertical;
-  line-height: 1.5;
-  font-family: inherit;
-}
-
-/* --- Галерея картинок статьи --------------------------------------------- */
-
-.gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-items: center;
   gap: 10px;
 }
 
-.gallery-item {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px;
-  border: 2px solid var(--scheme-border, #e3e9f0);
-  border-radius: 9px;
-  background: var(--scheme-surface, #fff);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color var(--motion, 160ms) ease;
+.ui-nav-link[aria-current='page'] .nav-icon {
+  opacity: 1;
 }
 
-.gallery-item:hover {
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Сайдбар узкий, и подпись бренда переносилась на три строки:
+   оставляем ей всё свободное место, лишнее прячем многоточием. */
+.brand-row .ui-brand {
+  flex: 1;
+  min-width: 0;
+  padding-right: 0;
+}
+
+.brand-row .ui-brand-copy {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.brand-row .ui-brand-copy small,
+.brand-row .ui-brand-copy {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sidebar-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 7px;
+  background: var(--scheme-surface, #fff);
+  color: var(--scheme-text-muted, #7b899b);
+  cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+  color: var(--scheme-text, #18304e);
   border-color: var(--scheme-border-strong, #c7d1dd);
 }
 
-.gallery-item.is-selected {
-  border-color: #1768ff;
-  background: var(--scheme-surface-selected, #f2f7ff);
+/* Свёрнутое меню: остаются только иконки */
+.ui-shell.is-collapsed .ui-sidebar {
+  width: 66px;
+  min-width: 66px;
 }
 
-.gallery-item:focus-visible {
-  outline: 3px solid rgba(23, 104, 255, 0.2);
-  outline-offset: 1px;
+.ui-shell.is-collapsed .ui-brand-copy,
+.ui-shell.is-collapsed .ui-nav-label,
+.ui-shell.is-collapsed .ui-nav-link span:not(.nav-icon),
+.ui-shell.is-collapsed .ui-profile-copy,
+.ui-shell.is-collapsed .profile-caret {
+  display: none;
 }
 
-.gallery-thumb {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: 6px;
-  background: #eef2f7;
-  display: block;
+.ui-shell.is-collapsed .ui-nav-link,
+.ui-shell.is-collapsed .ui-brand,
+.ui-shell.is-collapsed .ui-profile {
+  justify-content: center;
 }
 
-.gallery-caption {
-  font-size: calc(11px * var(--font-scale));
-  line-height: 1.35;
-  color: var(--scheme-text, #35414f);
+.ui-shell.is-collapsed .brand-row {
+  flex-direction: column;
+  gap: 8px;
 }
 
-.gallery-caption-original {
-  display: block;
-  margin-top: 3px;
-  font-size: calc(10px * var(--font-scale));
-  color: #8b98a9;
+.ui-shell.is-collapsed .sidebar-toggle {
+  margin-left: 0;
 }
 
-.gallery-mark {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #1768ff;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  box-shadow: 0 2px 6px rgba(16, 35, 63, 0.35);
-}
-
-.gallery-empty {
-  padding: 20px;
-  text-align: center;
-  font-size: 13px;
-  color: #7b899b;
-}
-
-/* --- Таблицы ------------------------------------------------------------- */
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-.ws-table td.wrap {
-  white-space: normal;
-}
-
-.title-link {
-  color: #10233f;
-  font-weight: 550;
-}
-
-.title-link:hover {
-  text-decoration: underline;
-}
-
-/* Поиск — главный элемент панели, поэтому занимает всё свободное место */
-.search-input.ws-input {
-  flex: 1;
-  min-width: 260px;
-}
-
-.photo-count {
-  margin-left: 8px;
-  font-size: calc(10px * var(--font-scale));
-  color: #7b899b;
-  white-space: nowrap;
-}
-
-.badge-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-
-.empty-state {
-  padding: 48px 24px;
-  text-align: center;
-  color: #6b7785;
-  font-size: 14px;
-}
-
-/* --- Сортируемые заголовки таблиц ---------------------------------------- */
-
-.ws-table th.sortable {
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.ws-table th.sortable:hover {
-  color: #1768ff;
-}
-
-.ws-table th.sortable:focus-visible {
-  outline: 3px solid rgba(23, 104, 255, 0.2);
-  outline-offset: -2px;
-}
-
-.sort-marker {
-  display: inline-block;
-  width: 12px;
-  margin-left: 4px;
-  font-size: 10px;
-  opacity: 0.35;
-}
-
-.ws-table th.is-sorted .sort-marker {
-  opacity: 1;
-  color: #1768ff;
-}
-
-/* --- Скелетоны ----------------------------------------------------------- */
-
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: -320px 0;
-  }
-  100% {
-    background-position: 320px 0;
-  }
-}
-
-.skeleton {
-  display: block;
-  border-radius: 6px;
-  background: #e9eef4;
-  background-image: linear-gradient(90deg, #e9eef4 0%, #f4f7fa 50%, #e9eef4 100%);
-  background-size: 320px 100%;
-  background-repeat: no-repeat;
-  animation: skeleton-shimmer 1.2s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeleton {
-    animation: none;
-  }
-}
-
-:root[data-theme='dark'] .skeleton {
-  background: #3a3d49;
-  background-image: linear-gradient(90deg, #3a3d49 0%, #454956 50%, #3a3d49 100%);
-}
-
-.skeleton-text {
-  height: 12px;
-}
-
-.skeleton-badge {
-  height: 20px;
-  width: 92px;
-  border-radius: 999px;
-}
-
-.skeleton-block {
-  height: 100px;
-}
-
-/* --- Меню профиля -------------------------------------------------------- */
-
+/* Разделитель над блоком профиля */
 .profile-menu {
   position: relative;
   margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--scheme-border-soft, #e8edf2);
 }
+
+/* --- Меню профиля -------------------------------------------------------- */
 
 .profile-trigger {
   width: 100%;
@@ -475,6 +213,23 @@ textarea.ws-input {
   text-align: left;
   background: none;
   border: 0;
+}
+
+/* Тема обводит блок профиля рамкой при фокусе, и она остаётся висеть
+   после щелчка мышью. Оставляем обводку только для клавиатуры. */
+.profile-trigger:focus,
+.profile-trigger:focus-within,
+.ui-profile:focus,
+.ui-profile:focus-within {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.profile-trigger:focus-visible {
+  outline: 3px solid var(--scheme-focus, rgba(23, 104, 255, 0.2));
+  outline-offset: 2px;
+  border-radius: 8px;
 }
 
 .profile-caret {
@@ -487,7 +242,7 @@ textarea.ws-input {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  right: 0;
+  min-width: 240px;
   z-index: 900;
   display: flex;
   flex-direction: column;
@@ -496,7 +251,7 @@ textarea.ws-input {
   border: 1px solid var(--scheme-border, #dce3eb);
   border-radius: 10px;
   background: var(--scheme-surface-raised, #fff);
-  box-shadow: 0 16px 40px rgba(16, 35, 63, 0.18);
+  box-shadow: 0 16px 40px var(--scheme-shadow, rgba(16, 35, 63, 0.18));
 }
 
 .profile-panel-head {
@@ -509,13 +264,13 @@ textarea.ws-input {
 }
 
 .profile-panel-head b {
-  font-size: calc(12px * var(--font-scale));
+  font-size: 12px;
   color: var(--scheme-text, #18304e);
 }
 
 .profile-panel-head small {
-  font-size: calc(10px * var(--font-scale));
-  color: #7b899b;
+  font-size: 10px;
+  color: var(--scheme-text-muted, #7b899b);
 }
 
 .profile-section {
@@ -526,11 +281,11 @@ textarea.ws-input {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  font-size: calc(10px * var(--font-scale));
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #7b899b;
+  color: var(--scheme-text-muted, #7b899b);
   margin-bottom: 7px;
 }
 
@@ -538,7 +293,7 @@ textarea.ws-input {
   font-variant-numeric: tabular-nums;
   text-transform: none;
   letter-spacing: 0;
-  color: #1768ff;
+  color: var(--scheme-accent, #1768ff);
 }
 
 .profile-switch {
@@ -553,15 +308,15 @@ textarea.ws-input {
   border-radius: 6px;
   background: var(--scheme-surface, #fff);
   color: var(--scheme-text, #18304e);
-  font-size: calc(11px * var(--font-scale));
+  font-size: 11px;
   font-weight: 650;
   cursor: pointer;
 }
 
 .profile-switch button.is-active {
-  border-color: #1768ff;
+  border-color: var(--scheme-accent, #1768ff);
   background: var(--scheme-surface-selected, #eaf2ff);
-  color: #1768ff;
+  color: var(--scheme-accent, #1768ff);
 }
 
 .profile-stepper {
@@ -578,7 +333,7 @@ textarea.ws-input {
   border-radius: 6px;
   background: var(--scheme-surface, #fff);
   color: var(--scheme-text, #18304e);
-  font-size: calc(11px * var(--font-scale));
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -602,7 +357,7 @@ textarea.ws-input {
 }
 
 .profile-bar i.is-on {
-  background: #1768ff;
+  background: var(--scheme-accent, #1768ff);
 }
 
 .profile-item {
@@ -611,7 +366,7 @@ textarea.ws-input {
   border-radius: 6px;
   background: none;
   color: var(--scheme-text, #18304e);
-  font-size: calc(11px * var(--font-scale));
+  font-size: 11px;
   font-weight: 650;
   text-align: left;
   cursor: pointer;
@@ -627,11 +382,11 @@ textarea.ws-input {
 }
 
 .profile-item.is-danger {
-  color: #c0392b;
+  color: var(--scheme-danger, #c0392b);
 }
 
-/* --- Свой выпадающий список ---------------------------------------------- */
-/* Нативный select рисуется средствами системы и в тему не попадает —
+/* --- Свой выпадающий список ----------------------------------------------
+   Нативный select рисуется средствами системы и в тему не попадает —
    на macOS он выпадает тёмной панелью. Поэтому свой. */
 
 .ui-select {
@@ -666,9 +421,9 @@ textarea.ws-input {
 
 .ui-select:focus-visible,
 .ui-select.is-open {
-  outline: 3px solid rgba(23, 104, 255, 0.2);
-  outline-offset: 1px;
-  border-color: #1768ff;
+  outline: 2px solid var(--scheme-accent, #1768ff);
+  outline-offset: 0;
+  border-color: var(--scheme-accent, #1768ff);
 }
 
 .ui-select.is-disabled {
@@ -684,7 +439,7 @@ textarea.ws-input {
 }
 
 .ui-select-value.is-placeholder {
-  color: #91a0b4;
+  color: var(--scheme-text-faint, #91a0b4);
   font-weight: 500;
 }
 
@@ -693,7 +448,7 @@ textarea.ws-input {
   font-size: 11px;
   line-height: 1;
   opacity: 0.5;
-  transition: transform var(--motion, 160ms) ease;
+  transition: transform 160ms ease;
 }
 
 .ui-select.is-open .ui-select-caret {
@@ -710,7 +465,7 @@ textarea.ws-input {
   border: 1px solid var(--scheme-border, #dce3eb);
   border-radius: 9px;
   background: var(--scheme-surface-raised, #fff);
-  box-shadow: 0 12px 32px rgba(16, 35, 63, 0.16);
+  box-shadow: 0 12px 32px var(--scheme-shadow, rgba(16, 35, 63, 0.16));
 }
 
 .ui-select-option {
@@ -731,7 +486,7 @@ textarea.ws-input {
 }
 
 .ui-select-option.is-selected {
-  color: #1768ff;
+  color: var(--scheme-accent, #1768ff);
 }
 
 .ui-select-option.is-selected.is-active {
@@ -742,7 +497,7 @@ textarea.ws-input {
   flex: none;
   width: 12px;
   font-size: 11px;
-  color: #1768ff;
+  color: var(--scheme-accent, #1768ff);
 }
 
 .ui-select-hint {
@@ -750,6 +505,464 @@ textarea.ws-input {
   margin-top: 2px;
   font-size: 11px;
   font-weight: 500;
-  color: #7b899b;
+  color: var(--scheme-text-muted, #7b899b);
   white-space: normal;
+}
+
+/* --- Поля форм -----------------------------------------------------------
+   Тема раскладывает .ws-field сеткой «подпись слева, поле справа» — это
+   хорошо для широких форм, но в узкой карточке входа и в колонке редактора
+   поля съезжают. Здесь возвращаем вертикальную раскладку. */
+
+.login-card .ws-field,
+.editor-grid .ws-field {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.login-card .ws-field-label,
+.editor-grid .ws-field-label {
+  padding-top: 0;
+}
+
+.ws-field-label {
+  color: var(--scheme-text-secondary, #2f4866);
+}
+
+/* У темы фокус — бледный ореол в 3px полупрозрачного синего. На широких
+   полях он выглядит размытым пятном, поэтому обводим чётко акцентом. */
+.workspace-body .ws-input:focus-visible,
+.workspace-body .ws-select:focus-visible,
+.workspace-body textarea.ws-input:focus-visible,
+.login-card .ws-input:focus-visible {
+  outline: 2px solid var(--scheme-accent, #1768ff);
+  outline-offset: 0;
+  border-color: var(--scheme-accent, #1768ff);
+}
+
+/* --- Редактор поста ------------------------------------------------------ */
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tag-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 92px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--scheme-border-soft, #e3e9f0);
+  border-radius: 8px;
+  background: var(--scheme-surface-muted, #fbfcfd);
+}
+
+.tag-picker .ws-chip {
+  cursor: pointer;
+}
+
+.tag-picker .ws-chip.is-active {
+  outline: 2px solid var(--scheme-accent, #1768ff);
+  outline-offset: 1px;
+}
+
+.post-preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--scheme-surface-muted, #fbfcfd);
+  border: 1px solid var(--scheme-border-soft, #e3e9f0);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--scheme-text, #18304e);
+}
+
+.char-counter {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.char-counter.over {
+  color: var(--scheme-danger, #c0392b);
+}
+
+.char-counter.near {
+  color: var(--scheme-warning, #b8860b);
+}
+
+.char-counter.ok {
+  color: var(--scheme-success, #2c6b45);
+}
+
+.source-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.55;
+  max-height: 460px;
+  overflow-y: auto;
+  color: var(--scheme-text-secondary, #35414f);
+}
+
+textarea.ws-input {
+  min-height: 220px;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
+/* --- Галерея фотографий -------------------------------------------------- */
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.gallery-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 2px solid var(--scheme-border, #e3e9f0);
+  border-radius: 9px;
+  background: var(--scheme-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease;
+}
+
+.gallery-item:hover {
+  border-color: var(--scheme-border-strong, #c7d1dd);
+}
+
+.gallery-item.is-selected {
+  border-color: var(--scheme-accent, #1768ff);
+  background: var(--scheme-surface-selected, #f2f7ff);
+}
+
+.gallery-item:focus-visible {
+  outline: 3px solid var(--scheme-focus, rgba(23, 104, 255, 0.2));
+  outline-offset: 1px;
+}
+
+.gallery-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--scheme-surface-muted, #eef2f7);
+  display: block;
+}
+
+.gallery-caption {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--scheme-text, #35414f);
+}
+
+.gallery-caption-original {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--scheme-text-muted, #8b98a9);
+}
+
+.gallery-mark {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--scheme-accent, #1768ff);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.gallery-remove {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--scheme-danger, #c0392b);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.gallery-item:hover .gallery-remove,
+.gallery-remove:focus-visible {
+  opacity: 1;
+}
+
+.gallery-badge {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--scheme-accent-soft, #eaf2ff);
+  color: var(--scheme-accent, #1768ff);
+}
+
+/* Зона перетаскивания файлов */
+.dropzone {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 96px;
+  padding: 14px;
+  border: 2px dashed var(--scheme-border-strong, #c7d1dd);
+  border-radius: 9px;
+  background: var(--scheme-surface-muted, #fbfcfd);
+  color: var(--scheme-text-muted, #7b899b);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.dropzone:hover {
+  border-color: var(--scheme-accent, #1768ff);
+  color: var(--scheme-text, #18304e);
+}
+
+.dropzone.is-over {
+  border-color: var(--scheme-accent, #1768ff);
+  background: var(--scheme-surface-selected, #eaf2ff);
+  color: var(--scheme-accent, #1768ff);
+}
+
+.dropzone.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* --- Таблицы ------------------------------------------------------------- */
+
+/* Горизонтальная прокрутка нужна только на узких экранах.
+   Держать её всегда нельзя: при overflow-x: auto спецификация превращает
+   overflow-y в hidden, обёртка становится контейнером прокрутки, и sticky
+   у заголовков прилипает к ней, а не к окну. Обойти это через clip тоже
+   не выходит — clip в такой паре тоже вычисляется в hidden. */
+.table-wrap {
+  overflow-x: auto;
+}
+
+@media (min-width: 1000px) {
+  .table-wrap {
+    overflow-x: visible;
+  }
+}
+
+/* Шапка таблицы остаётся видимой при прокрутке страницы */
+.ws-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--scheme-surface-muted, #f6f8fb);
+  box-shadow: inset 0 -1px 0 var(--scheme-border, #dce3eb);
+}
+
+.ws-table td.wrap {
+  white-space: normal;
+}
+
+.ws-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ws-table th.sortable:hover {
+  color: var(--scheme-accent, #1768ff);
+}
+
+.ws-table th.sortable:focus-visible {
+  outline: 3px solid var(--scheme-focus, rgba(23, 104, 255, 0.2));
+  outline-offset: -2px;
+}
+
+.sort-marker {
+  display: inline-block;
+  width: 12px;
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.35;
+}
+
+.ws-table th.is-sorted .sort-marker {
+  opacity: 1;
+  color: var(--scheme-accent, #1768ff);
+}
+
+/* Заголовок ведёт на карточку новости, но выглядит обычным текстом:
+   сплошная синева в колонке заголовков только шумит.
+   Селектор с .ws-table — у темы правило `.ws-table a` специфичнее одного класса. */
+.ws-table a.title-link,
+.title-link {
+  color: var(--scheme-text, #10233f);
+  font-weight: 600;
+}
+
+.ws-table a.title-link:hover,
+.title-link:hover {
+  color: var(--scheme-accent, #1768ff);
+}
+
+.photo-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--scheme-text-muted, #7b899b);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.photo-count-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 0.7;
+}
+
+.load-more {
+  display: grid;
+  place-items: center;
+  min-height: 46px;
+  padding: 12px;
+  font-size: 12px;
+}
+
+/* Поиск — главный элемент панели, поэтому занимает всё свободное место */
+.search-input.ws-input {
+  flex: 1;
+  min-width: 260px;
+}
+
+.empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--scheme-text-muted, #6b7785);
+  font-size: 14px;
+}
+
+/* --- Скелетоны ----------------------------------------------------------- */
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -320px 0;
+  }
+  100% {
+    background-position: 320px 0;
+  }
+}
+
+.skeleton {
+  display: block;
+  border-radius: 6px;
+  background: var(--scheme-surface-hover, #e9eef4);
+  background-image: linear-gradient(
+    90deg,
+    var(--scheme-surface-hover, #e9eef4) 0%,
+    var(--scheme-surface-muted, #f4f7fa) 50%,
+    var(--scheme-surface-hover, #e9eef4) 100%
+  );
+  background-size: 320px 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+.skeleton-text {
+  height: 12px;
+}
+
+.skeleton-badge {
+  height: 20px;
+  width: 92px;
+  border-radius: 999px;
+}
+
+.skeleton-block {
+  height: 100px;
+}
+
+/* --- Промпты ------------------------------------------------------------- */
+
+.prompt-body {
+  min-height: 320px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.prompt-preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid var(--scheme-border-soft, #e3e9f0);
+  border-radius: 8px;
+  background: var(--scheme-surface-muted, #fbfcfd);
+  color: var(--scheme-text-secondary, #35414f);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.placeholder-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.placeholder-chip {
+  padding: 3px 8px;
+  border: 1px solid var(--scheme-border, #dce3eb);
+  border-radius: 6px;
+  background: var(--scheme-surface, #fff);
+  color: var(--scheme-accent, #1768ff);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.placeholder-chip:hover {
+  border-color: var(--scheme-accent, #1768ff);
 }

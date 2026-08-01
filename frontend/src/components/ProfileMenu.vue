@@ -3,18 +3,15 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import {
-  FONT_STEPS,
-  UI_STEPS,
-  fontBigger,
-  fontSmaller,
-  fontStep,
-  percent,
-  resetAppearance,
+  SCALE_STEPS,
+  isDefaultScale,
+  resetScale,
+  scaleDown,
+  scalePercent,
+  scaleStep,
+  scaleUp,
   setTheme,
   theme,
-  uiBigger,
-  uiStep,
-  uiSmaller,
 } from '@/appearance'
 import { useAuthStore } from '@/stores/auth'
 
@@ -37,14 +34,8 @@ const roleLabel = computed(() =>
   auth.user?.role === 'superadmin' ? 'Суперадминистратор' : 'Редактор',
 )
 
-const fontAtMin = computed(() => fontStep.value === 0)
-const fontAtMax = computed(() => fontStep.value === FONT_STEPS.length - 1)
-const uiAtMin = computed(() => uiStep.value === 0)
-const uiAtMax = computed(() => uiStep.value === UI_STEPS.length - 1)
-
-const isDefault = computed(
-  () => fontStep.value === FONT_STEPS.indexOf(1) && uiStep.value === UI_STEPS.indexOf(1),
-)
+const atMin = computed(() => scaleStep.value === 0)
+const atMax = computed(() => scaleStep.value === SCALE_STEPS.length - 1)
 
 function onPointerDown(event: PointerEvent) {
   if (!root.value?.contains(event.target as Node)) open.value = false
@@ -106,51 +97,22 @@ async function onLogout() {
 
       <section class="profile-section">
         <div class="profile-section-title">
-          Размер шрифта
-          <span class="profile-value">{{ percent(FONT_STEPS, fontStep) }}</span>
+          Масштаб
+          <span class="profile-value">{{ scalePercent() }}</span>
         </div>
         <div class="profile-stepper">
-          <button type="button" :disabled="fontAtMin" aria-label="Уменьшить шрифт" @click="fontSmaller">
-            А−
-          </button>
-          <span class="profile-bar" aria-hidden="true">
-            <i
-              v-for="(_, index) in FONT_STEPS"
-              :key="index"
-              :class="{ 'is-on': index <= fontStep }"
-            />
-          </span>
-          <button type="button" :disabled="fontAtMax" aria-label="Увеличить шрифт" @click="fontBigger">
-            А+
-          </button>
-        </div>
-      </section>
-
-      <section class="profile-section">
-        <div class="profile-section-title">
-          Масштаб интерфейса
-          <span class="profile-value">{{ percent(UI_STEPS, uiStep) }}</span>
-        </div>
-        <div class="profile-stepper">
-          <button type="button" :disabled="uiAtMin" aria-label="Уменьшить масштаб" @click="uiSmaller">
+          <button type="button" :disabled="atMin" aria-label="Уменьшить" @click="scaleDown">
             −
           </button>
           <span class="profile-bar" aria-hidden="true">
-            <i v-for="(_, index) in UI_STEPS" :key="index" :class="{ 'is-on': index <= uiStep }" />
+            <i v-for="(_, index) in SCALE_STEPS" :key="index" :class="{ 'is-on': index <= scaleStep }" />
           </span>
-          <button type="button" :disabled="uiAtMax" aria-label="Увеличить масштаб" @click="uiBigger">
-            +
-          </button>
+          <button type="button" :disabled="atMax" aria-label="Увеличить" @click="scaleUp">+</button>
         </div>
       </section>
 
-      <button
-        type="button"
-        class="profile-item"
-        :disabled="isDefault"
-        @click="resetAppearance"
-      >
-        Сбросить размеры
+      <button type="button" class="profile-item" :disabled="isDefaultScale()" @click="resetScale">
+        Сбросить масштаб
       </button>
 
       <button type="button" class="profile-item is-danger" @click="onLogout">Выйти</button>
@@ -161,6 +123,7 @@ async function onLogout() {
       class="ui-profile profile-trigger"
       :aria-expanded="open"
       aria-haspopup="menu"
+      :title="auth.user?.username"
       @click="open = !open"
     >
       <span class="ui-avatar">{{ initials }}</span>

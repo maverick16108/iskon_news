@@ -58,6 +58,8 @@ class SourceOut(ORMModel):
     last_fetched_at: datetime | None
     last_error: str | None
     created_at: datetime
+    prompt_template_id: int | None
+    prompt_template_name: str | None = None
 
 
 class SourceCreate(BaseModel):
@@ -68,6 +70,7 @@ class SourceCreate(BaseModel):
     signature_suffix: str = Field(default="website", max_length=64)
     fetch_interval_minutes: int = Field(default=60, ge=5, le=10080)
     is_active: bool = True
+    prompt_template_id: int | None = None
 
 
 class SourceUpdate(BaseModel):
@@ -78,6 +81,7 @@ class SourceUpdate(BaseModel):
     signature_suffix: str | None = Field(default=None, max_length=64)
     fetch_interval_minutes: int | None = Field(default=None, ge=5, le=10080)
     is_active: bool | None = None
+    prompt_template_id: int | None = None
 
 
 # --- Статьи и посты -------------------------------------------------------
@@ -109,7 +113,8 @@ class PostUpdate(BaseModel):
 
 class ImageOut(ORMModel):
     id: int
-    url: str
+    url: str | None
+    is_uploaded: bool
     caption: str | None
     caption_ru: str | None
     width: int | None
@@ -148,6 +153,44 @@ class ArticleListItem(ArticleOut):
     post_status: PostStatus | None
     post_char_count: int | None
     image_count: int
+
+
+# --- Шаблоны промптов -------------------------------------------------------
+
+class PromptOut(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    body: str
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+    updated_by: str | None
+    used_by_sources: int
+
+
+class PromptCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=512)
+    body: str = Field(min_length=20)
+    is_default: bool = False
+
+
+class PromptUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=512)
+    body: str | None = Field(default=None, min_length=20)
+    is_default: bool | None = None
+
+
+class PromptPreview(BaseModel):
+    rendered: str
+    chars: int
+
+
+class PlaceholderInfo(BaseModel):
+    token: str
+    description: str
 
 
 # --- Настройки языковой модели --------------------------------------------

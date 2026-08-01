@@ -10,7 +10,7 @@ from openai import APIError, AsyncOpenAI, RateLimitError
 
 from app.ai.config import LlmConfig, current as current_config
 from app.ai.hashtags import sanitize_hashtags
-from app.ai.prompt import GLOSSARY, SYSTEM_PROMPT, build_user_prompt
+from app.ai.prompt import GLOSSARY, render_system_prompt, build_user_prompt
 from app.config import settings
 from app.models import MAX_POST_CHARS, Article, ContentQuality, Source
 
@@ -102,8 +102,12 @@ async def rewrite(article: Article, source: Source) -> Draft:
         is_excerpt=article.content_quality is not ContentQuality.full,
     )
 
+    # Промпт берём из шаблона, назначенного источнику; если своего нет —
+    # передаём None, и соберётся встроенный по умолчанию.
+    template = source.prompt_template.body if source.prompt_template else None
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": render_system_prompt(template)},
         {"role": "user", "content": user_prompt},
     ]
 

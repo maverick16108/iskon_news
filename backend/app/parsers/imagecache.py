@@ -48,6 +48,40 @@ def cached_path(url: str) -> Path | None:
     return None
 
 
+def save_upload(content: bytes, filename: str, content_type: str) -> tuple[str, str]:
+    """Кладёт загруженный редактором файл рядом с остальными картинками.
+
+    Возвращает имя файла и его тип.
+    """
+    media_type = (content_type or "").split(";")[0].strip().lower()
+    extension = ALLOWED_TYPES.get(media_type)
+
+    if extension is None:
+        suffix = Path(filename).suffix.lower()
+        extension = {".jpeg": ".jpg"}.get(suffix, suffix)
+        if extension not in ALLOWED_TYPES.values():
+            raise ValueError("Поддерживаются только JPEG, PNG, WebP и AVIF")
+        media_type = next(t for t, ext in ALLOWED_TYPES.items() if ext == extension)
+
+    digest = hashlib.sha256(content).hexdigest()[:32]
+    name = f"upload-{digest}{extension}"
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    (CACHE_DIR / name).write_bytes(content)
+
+    log.info("Загружена картинка: %s (%d КБ)", name, len(content) // 1024)
+    return name, media_type
+
+
+def local_path(filename: str) -> Path:
+    return CACHE_DIR / filename
+
+
+def media_type_for(filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    return next((t for t, ext in ALLOWED_TYPES.items() if ext == suffix), "image/jpeg")
+
+
 async def ensure_cached(url: str) -> tuple[Path, str]:
     """Возвращает путь к файлу и его тип, при необходимости скачивая."""
     existing = cached_path(url)
