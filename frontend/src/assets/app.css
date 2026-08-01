@@ -1122,6 +1122,11 @@ textarea.ws-input {
   white-space: nowrap;
 }
 
+/* Дата со временем не должна ломаться на две строки */
+.ws-table td.nowrap {
+  white-space: nowrap;
+}
+
 .no-post-note {
   font-size: 11px;
   font-style: italic;

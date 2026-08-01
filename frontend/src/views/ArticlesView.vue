@@ -47,7 +47,9 @@ const SORT_KEYS: SortKey[] = ['published', 'fetched', 'title', 'source', 'qualit
 // Сортировку можно задать адресом: бот приводит сюда со ссылкой
 // ?sort=fetched, чтобы только что собранные новости были сверху
 const initialSort = SORT_KEYS.find((key) => key === route.query.sort)
-const sortKey = ref<SortKey>(initialSort ?? 'published')
+// По умолчанию сверху то, что собрали последним: у новостей из рассылок
+// дата публикации бывает старой, и по ней свежий улов уходит в конец
+const sortKey = ref<SortKey>(initialSort ?? 'fetched')
 const sortAsc = ref(route.query.order === 'asc')
 
 const sourceOptions = computed<SelectOption[]>(() => [
@@ -62,8 +64,8 @@ const statusOptions = computed<SelectOption[]>(() => [
 ])
 
 const COLUMNS: { key: SortKey; label: string; title?: string; numeric?: boolean }[] = [
+  { key: 'fetched', label: 'Добавлена', title: 'Когда новость забрал наш сборщик' },
   { key: 'published', label: 'Дата новости', title: 'Когда новость вышла на сайте источника' },
-  { key: 'fetched', label: 'Добавлена', title: 'Когда её забрал наш парсер' },
   { key: 'title', label: 'Заголовок' },
   { key: 'source', label: 'Источник' },
   { key: 'quality', label: 'Исходник' },
@@ -339,11 +341,11 @@ watch([sourceFilter, statusFilter, includeArchive], load)
               @auxclick="openArticle(article, $event)"
               @keydown.enter="openArticle(article, $event)"
             >
-              <td>
+              <td class="nowrap">
                 <span class="unread-dot" aria-hidden="true" />
-                {{ formatDateShort(article.published_at) }}
+                {{ formatDate(article.fetched_at) }}
               </td>
-              <td class="muted">{{ formatDateShort(article.fetched_at) }}</td>
+              <td class="muted nowrap">{{ formatDateShort(article.published_at) }}</td>
               <td class="wrap">
                 <RouterLink
                   class="title-link"
