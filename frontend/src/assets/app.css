@@ -1115,6 +1115,15 @@ textarea.ws-input {
   padding-left: 18px;
 }
 
+/* Ссылки и статус в строку с зазором: без него они слипаются в кашу */
+.repeat-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
 /* Пришла уже несвежей: приглушённый янтарный, мягче чем у повтора —
    это не проблема, а повод взглянуть на дату */
 .stale-badge {
@@ -1849,24 +1858,42 @@ html:not(.kbd-nav) label:focus-within {
     clip-path: none;
   }
 
-  /* Панель фильтров: в строку не помещается, раскладываем по вертикали */
+  /* Панель действий и фильтров. Кнопки не растягиваем на всю ширину:
+     от этого они разъезжались по строке и вставали вразнобой — каждая
+     занимает столько, сколько нужно её подписи. */
   .ws-control-bar {
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
   }
 
   .ws-control-bar > * {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
   }
 
+  /* Поиск и главная кнопка — во всю ширину: по ним попадают чаще всего */
   .search-input {
     flex: 1 0 100%;
   }
 
   .row-end {
     margin-left: 0;
-    flex: 1 1 100%;
+    flex: 1 0 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .row-end > .ws-btn-primary {
+    flex: 1 0 auto;
+    justify-content: center;
+  }
+
+  /* Прямая кнопка действия в панели тоже во всю ширину */
+  .ws-control-bar > .ws-btn-primary {
+    flex: 1 0 100%;
+    justify-content: center;
   }
 
   /* Таблица в семь столбцов на телефоне нечитаема: заголовок сжимается
@@ -1993,6 +2020,36 @@ html:not(.kbd-nav) label:focus-within {
   .ui-date-pop {
     left: auto;
     right: 0;
+  }
+
+  /* Кнопки под постом: по две в ряд равной ширины, публикация во всю строку.
+     Разной ширины они вставали лесенкой и читались как случайный набор. */
+  .editor-grid .ws-surface-body > .row > .ws-btn {
+    flex: 1 1 calc(50% - 4px);
+    justify-content: center;
+  }
+
+  .editor-grid .ws-surface-body > .row > .row-end {
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
+
+  .editor-grid .ws-surface-body > .row > .row-end > .ws-btn {
+    flex: 1 0 100%;
+    justify-content: center;
+  }
+
+  /* Готовые формулировки правок длинные — по одной в строку,
+     иначе они рвутся посреди фразы */
+  .editor-grid .ws-chip,
+  .placeholder-chip {
+    flex: 1 1 100%;
+    text-align: left;
+  }
+
+  /* Поле указания модели и кнопка «Поправить» — в столбик */
+  .editor-grid .ws-field .row > .ws-input {
+    flex: 1 0 100%;
   }
 
   /* Числовое поле рядом с календарём: во всю ширину оно смотрится

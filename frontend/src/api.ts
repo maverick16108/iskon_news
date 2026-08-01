@@ -273,6 +273,8 @@ export interface FetchSettings {
   max_age_days: number | null
   last_run_at: string | null
   last_result: string | null
+  /** До какого момента подписчикам уже рассказали */
+  last_reported_at: string | null
   updated_at: string
   updated_by: string | null
 }

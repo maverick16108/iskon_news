@@ -12,11 +12,11 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from app.config import settings
 from app.db import SessionFactory
-from app.models import FetchSettings, Source
+from app.models import Article, FetchSettings, Source
 from app.parsers.rss import fetch_feed
 from app.telegram.bot import collect_summary, notify_subscribers, poll_once
 from app.telegram.client import TelegramError
@@ -134,8 +134,12 @@ async def fetch_loop() -> None:
 
                 if _due_values(enabled, interval, last_run, datetime.now(timezone.utc)):
                     log.info("Пора обходить источники")
-                    added = await run_fetch_round()
-                    await _report(added)
+                    await run_fetch_round()
+
+                # Сводку шлём на каждом тике, а не только после обхода:
+                # так она догонит и то, что собрали кнопкой в ленте,
+                # и то, что осталось от оборвавшегося обхода
+                await report_new_articles()
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001 — планировщик не должен умирать
@@ -144,20 +148,46 @@ async def fetch_loop() -> None:
             await asyncio.sleep(TICK_SECONDS)
 
 
-async def _report(added: dict[str, int]) -> None:
-    """Шлёт подписчикам сводку о том, что принёс обход."""
-    if not added:
-        return
+async def report_new_articles() -> int:
+    """Рассказывает подписчикам обо всём, о чём ещё не рассказывали.
 
+    Считаем не по результату одного обхода, а по отметке времени: обход
+    может оборваться на середине — скажем, службу перезапустили при
+    выкладке, — и добавленное осталось бы без сводки навсегда. Так же
+    сюда попадает и то, что собрали вручную кнопкой в ленте.
+    """
     config = await telegram_config()
     if not config.token:
-        return
+        return 0
 
     async with SessionFactory() as db:
+        row = await get_fetch_settings(db)
+        since = row.last_reported_at
+
+        query = (
+            select(Source.name, func.count(Article.id))
+            .join(Article, Article.source_id == Source.id)
+            .group_by(Source.name)
+        )
+        if since is not None:
+            query = query.where(Article.fetched_at > since)
+
+        added = {name: count for name, count in (await db.execute(query)).all() if count}
+        if not added:
+            # Отметку всё равно двигаем: иначе при первом же появлении
+            # новостей в сводку попадёт всё, что накопилось до этого
+            row.last_reported_at = datetime.now(timezone.utc)
+            await db.commit()
+            return 0
+
         summary = await collect_summary(db, added)
         delivered = await notify_subscribers(db, config.token, summary)
 
-    log.info("Сводка отправлена подписчикам: %d", delivered)
+        row.last_reported_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    log.info("Сводка отправлена подписчикам: %d (новостей %d)", delivered, sum(added.values()))
+    return delivered
 
 
 async def bot_loop() -> None:

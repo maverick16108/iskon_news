@@ -569,6 +569,12 @@ class FetchSettings(Base):
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_result: Mapped[str | None] = mapped_column(Text)
 
+    # До какого момента подписчикам уже рассказали о новостях. Считаем
+    # от него, а не от результата одного обхода: обход может оборваться
+    # на середине — например, службу перезапустили при выкладке, —
+    # и тогда добавленное осталось бы без сводки навсегда.
+    last_reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

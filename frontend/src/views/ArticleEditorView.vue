@@ -599,9 +599,9 @@ onMounted(async () => {
                   <!-- Двойник — отдельная карточка со своим постом. Совпадение
                        по адресу — та же самая карточка, и пост у неё этот же. -->
                   <template v-if="entry.article_id">
-                    —
+                    <span class="muted">— отдельная карточка:</span>
                     <RouterLink :to="{ name: 'article', params: { id: entry.article_id } }">
-                      открыть карточку
+                      открыть у нас
                     </RouterLink>
                     <span
                       class="ws-badge"
@@ -609,36 +609,37 @@ onMounted(async () => {
                     >
                       {{ entry.post_status ? POST_STATUS_LABELS[entry.post_status] : 'поста нет' }}
                     </span>
-                    <a
-                      v-if="entry.telegram_url"
-                      :href="entry.telegram_url"
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      пост в канале
-                    </a>
                   </template>
 
                   <template v-else>
-                    — тот же адрес, это одна и та же карточка
-                    <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener">
-                      открыть на сайте
-                    </a>
+                    <span class="muted">— тот же адрес, это та же карточка:</span>
+                    <RouterLink :to="{ name: 'article', params: { id: article.id } }">
+                      открыть у нас
+                    </RouterLink>
                     <span
                       class="ws-badge"
                       :class="post ? POST_STATUS_TONE[post.status] : 'neutral'"
                     >
                       {{ post ? POST_STATUS_LABELS[post.status] : 'поста нет' }}
                     </span>
-                    <a
-                      v-if="post?.telegram_url"
-                      :href="post.telegram_url"
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      пост в канале
-                    </a>
                   </template>
+
+                  <a
+                    v-if="entry.url"
+                    :href="entry.url"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    на сайте источника
+                  </a>
+                  <a
+                    v-if="entry.article_id ? entry.telegram_url : post?.telegram_url"
+                    :href="(entry.article_id ? entry.telegram_url : post?.telegram_url) as string"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    пост в канале
+                  </a>
                 </li>
               </ul>
             </div>

@@ -354,6 +354,7 @@ class FetchSettingsOut(BaseModel):
     max_age_days: int | None
     last_run_at: datetime | None
     last_result: str | None
+    last_reported_at: datetime | None = None
     updated_at: datetime
     updated_by: str | None
 

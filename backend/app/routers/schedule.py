@@ -14,9 +14,9 @@ from app.schemas import (
     FetchSettingsUpdate,
     Message,
 )
-from app.telegram.bot import collect_summary, notify_subscribers, render_summary
+from app.telegram.bot import collect_summary, render_summary
 from app.telegram.config import current as telegram_config
-from app.worker import get_fetch_settings, run_fetch_round
+from app.worker import get_fetch_settings, report_new_articles, run_fetch_round
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings/schedule", tags=["settings"])
@@ -30,6 +30,7 @@ def _out(row: FetchSettings) -> FetchSettingsOut:
         max_age_days=row.max_age_days,
         last_run_at=row.last_run_at,
         last_result=row.last_result,
+        last_reported_at=row.last_reported_at,
         updated_at=row.updated_at,
         updated_by=row.updated_by.username if row.updated_by else None,
     )
@@ -83,12 +84,7 @@ async def update_schedule(
 async def run_now(request: Request, db: DbDep, user: CurrentUser):
     """Обойти источники прямо сейчас, не дожидаясь расписания."""
     added = await run_fetch_round()
-
-    if added:
-        config = await telegram_config()
-        if config.token:
-            summary = await collect_summary(db, added)
-            await notify_subscribers(db, config.token, summary)
+    await report_new_articles()
 
     await write_audit(
         db,
