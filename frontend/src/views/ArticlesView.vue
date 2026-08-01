@@ -192,6 +192,24 @@ async function fetchAll() {
 const unprocessed = computed(() => articles.value.filter((a) => !a.post_status).length)
 const unviewed = computed(() => articles.value.filter((a) => !a.is_viewed).length)
 
+// С какого возраста новость уже не новость. Две недели: недельная задержка
+// у дайджестов — обычное дело, а всё, что старше, редактору стоит видеть.
+const STALE_AFTER_DAYS = 14
+
+/** На сколько дней новость была старой в момент, когда мы её забрали. */
+function staleDays(article: ArticleListItem): number {
+  if (!article.published_at) return 0
+  const days = (Date.parse(article.fetched_at) - Date.parse(article.published_at)) / 86_400_000
+  return days >= STALE_AFTER_DAYS ? Math.round(days) : 0
+}
+
+/** Словами, чтобы не заставлять считать в уме. */
+function staleLabel(days: number): string {
+  if (days >= 365) return `${Math.floor(days / 365)} г.`
+  if (days >= 60) return `${Math.round(days / 30)} мес.`
+  return `${days} дн.`
+}
+
 const markingRead = ref(false)
 
 /** Отметить все новости просмотренными — отметка личная, чужие не трогаем. */
@@ -390,6 +408,16 @@ watch([sourceFilter, statusFilter, includeArchive], load)
                 >
                   <NavIcon name="photo" class="photo-count-icon" />
                   {{ article.image_count }}
+                </span>
+                <!-- Новость пришла к нам уже несвежей. Это не то же, что архив:
+                     там переиздание старой записи, а здесь просто задержка —
+                     дайджест дошёл до нас через неделю после публикации. -->
+                <span
+                  v-if="!article.is_archive && staleDays(article)"
+                  class="ws-badge stale-badge"
+                  :title="`На момент сбора новости было ${staleDays(article)} дн.`"
+                >
+                  старая · {{ staleLabel(staleDays(article)) }}
                 </span>
                 <span
                   v-if="article.is_archive"

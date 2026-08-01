@@ -1111,6 +1111,17 @@ textarea.ws-input {
   padding-left: 18px;
 }
 
+/* Пришла уже несвежей: приглушённый янтарный, мягче чем у повтора —
+   это не проблема, а повод взглянуть на дату */
+.stale-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  background: var(--scheme-surface-hover, #eef2f7);
+  border: 1px solid var(--scheme-warning, #d99a2b);
+  color: var(--scheme-warning, #96660f);
+  white-space: nowrap;
+}
+
 /* Архивная запись: серая, нейтральная — это не проблема, а просто
    переиздание старого материала */
 .archive-badge {
