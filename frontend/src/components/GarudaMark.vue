@@ -1,13 +1,30 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 /** Гаруда — орёл, вахана Вишну. Контуры взяты из знака, присланного заказчиком.
  *
  * Внутренняя группа — система координат исходника: сотые доли и перевёрнутая
- * ось Y достались от обводки растра. Внешняя вписывает знак 958×714 в
- * квадратный кадр 64×64 с полями: 958 × 0.06013 = 57.6 — это 90 % ширины.
+ * ось Y достались от обводки растра.
  *
- * `plain` — одним цветом без плашки (для светлого фона).
+ * `plain` — одним цветом без плашки.
  */
-withDefaults(defineProps<{ size?: number; plain?: boolean }>(), { size: 34, plain: false })
+const props = withDefaults(defineProps<{ size?: number; plain?: boolean }>(), {
+  size: 34,
+  plain: false,
+})
+
+/** Вписывает знак 958×714 в квадрат 64×64.
+ *
+ * С плашкой знаку нужны поля, иначе он упрётся в скруглённые углы. Без
+ * плашки поля — просто пустота вокруг, поэтому там знак растянут на всю
+ * ширину кадра: при одном и том же `size` он выглядит заметно крупнее.
+ */
+const fit = computed(() => {
+  const scale = props.plain ? 64 / 958 : (64 * 0.9) / 958
+  const x = (64 - 958 * scale) / 2
+  const y = (64 - 714 * scale) / 2
+  return `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${scale.toFixed(5)})`
+})
 </script>
 
 <template>
@@ -20,10 +37,7 @@ withDefaults(defineProps<{ size?: number; plain?: boolean }>(), { size: 34, plai
     aria-label="Гаруда"
   >
     <rect v-if="!plain" width="64" height="64" rx="15" fill="currentColor" />
-    <g
-      transform="translate(3.20 10.54) scale(0.06013)"
-      :fill="plain ? 'currentColor' : '#fff'"
-    >
+    <g :transform="fit" :fill="plain ? 'currentColor' : '#fff'">
       <g transform="translate(0,714) scale(0.1,-0.1)">
         <path
           d="M1950 6188 c-48 -80 -50 -200 -4 -292 98 -194 400 -505 809 -832 552

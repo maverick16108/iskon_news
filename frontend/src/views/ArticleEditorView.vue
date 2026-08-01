@@ -204,6 +204,56 @@ function isActiveTag(tag: string) {
 
 const selectedImages = computed(() => article.value?.images.filter((i) => i.is_selected) ?? [])
 
+// Телеграм принимает в одном альбоме не больше десяти фотографий
+const MAX_PHOTOS = 10
+
+const togglingAll = ref(false)
+
+const allSelected = computed(() => {
+  const images = article.value?.images ?? []
+  if (!images.length) return false
+  return selectedImages.value.length >= Math.min(images.length, MAX_PHOTOS)
+})
+
+/** Отметить все фотографии разом — или снять отметку со всех. */
+async function toggleAllImages() {
+  const images = article.value?.images ?? []
+  if (!images.length) return
+
+  const select = !allSelected.value
+  // Больше десяти телеграм всё равно не возьмёт, поэтому лишние не отмечаем
+  const limit = select ? MAX_PHOTOS : images.length
+  const previous = images.map((image) => image.is_selected)
+
+  let position = 0
+  for (const image of images) {
+    image.is_selected = select && position < limit
+    if (select) position += 1
+  }
+
+  togglingAll.value = true
+  error.value = ''
+  try {
+    await Promise.all(
+      images.map((image, index) =>
+        image.is_selected === previous[index]
+          ? null
+          : api.patch<ArticleImage>(`/api/articles/${articleId}/images/${image.id}`, {
+              is_selected: image.is_selected,
+            }),
+      ),
+    )
+    if (select && images.length > MAX_PHOTOS) {
+      notice.value = `Отмечены первые ${MAX_PHOTOS} фотографий — больше телеграм в одном посте не покажет`
+    }
+  } catch (e) {
+    images.forEach((image, index) => (image.is_selected = previous[index]))
+    error.value = e instanceof Error ? e.message : 'Не удалось изменить выбор фото'
+  } finally {
+    togglingAll.value = false
+  }
+}
+
 async function toggleImage(image: ArticleImage) {
   // Отмечаем сразу, не дожидаясь сервера — щелчок должен быть мгновенным
   const previous = image.is_selected
@@ -481,6 +531,16 @@ onMounted(async () => {
                 <span class="muted">
                   ({{ selectedImages.length }} из {{ article.images.length }})</span
                 >
+                <button
+                  v-if="article.images.length"
+                  class="ws-btn ws-btn-quiet ws-control-sm"
+                  type="button"
+                  :disabled="togglingAll"
+                  style="margin-left: 10px"
+                  @click="toggleAllImages"
+                >
+                  {{ allSelected ? 'Снять выбор' : 'Выбрать все' }}
+                </button>
               </label>
               <div>
                 <div v-if="article.images.length" class="gallery" style="margin-bottom: 10px">
