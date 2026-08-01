@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import GarudaMark from '@/components/GarudaMark.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -32,10 +33,10 @@ async function submit() {
   <div class="login-screen">
     <form class="login-card" @submit.prevent="submit">
       <div class="login-brand">
-        <span class="ui-brand-mark">ИН</span>
+        <GarudaMark :size="40" plain style="color: var(--scheme-accent, #1768ff)" />
         <span>
           <div class="login-title">Новости ИСККОН</div>
-          <div class="login-subtitle">Редакция канала t.me/iskconru</div>
+          <div class="login-subtitle">Портал публикаций</div>
         </span>
       </div>
 
