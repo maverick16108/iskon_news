@@ -24,8 +24,13 @@ from app.telegram.config import current as telegram_config
 
 log = logging.getLogger(__name__)
 
-# Ключи советующих блокировок: произвольные, лишь бы не совпадали с чужими
-LOCK_FETCH = 795_101
+# Ключи советующих блокировок: произвольные, лишь бы не совпадали с чужими.
+# Их две и они про разное. LOCK_SCHEDULER держится всё время жизни процесса
+# и отвечает на вопрос «кто здесь планировщик». LOCK_FETCH берётся только на
+# время самого обхода и отпускается сразу после — иначе ручная догрузка
+# архива никогда не смогла бы начаться.
+LOCK_SCHEDULER = 795_101
+LOCK_FETCH = 795_103
 LOCK_BOT = 795_102
 
 # Как часто просыпаемся, чтобы проверить, не пора ли обходить источники
@@ -38,6 +43,10 @@ BOT_ERROR_PAUSE_SECONDS = 30
 async def _try_lock(db, key: int) -> bool:
     """Советующая блокировка на всё время жизни соединения."""
     return bool(await db.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key}))
+
+
+async def _unlock(db, key: int) -> None:
+    await db.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
 
 
 async def get_fetch_settings(db) -> FetchSettings:
@@ -65,6 +74,11 @@ async def run_fetch_round() -> dict[str, int]:
     added: dict[str, int] = {}
 
     async with SessionFactory() as db:
+        # Обход всегда один: рядом может идти ручная догрузка архива
+        if not await _try_lock(db, LOCK_FETCH):
+            log.info("Обход уже идёт в другом месте — пропускаем этот тик")
+            return added
+
         sources = list(await db.scalars(select(Source).where(Source.is_active.is_(True))))
 
         for source in sources:
@@ -87,6 +101,7 @@ async def run_fetch_round() -> dict[str, int]:
             else "новых публикаций нет"
         )
         await db.commit()
+        await _unlock(db, LOCK_FETCH)
 
     return added
 
@@ -98,7 +113,7 @@ async def fetch_loop() -> None:
     пока живёт соединение. Данные читаем короткими сессиями.
     """
     async with SessionFactory() as db:
-        if not await _try_lock(db, LOCK_FETCH):
+        if not await _try_lock(db, LOCK_SCHEDULER):
             log.info("Обход источников уже ведёт другой процесс — эта задача не нужна")
             return
 
