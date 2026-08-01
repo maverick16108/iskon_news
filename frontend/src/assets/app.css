@@ -156,6 +156,15 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Подзаголовок длиннее названия, а знак рядом занял больше места, чем
+   раньше. Сжимаем разрядку, иначе строка обрезается на узкой панели. */
+.brand-row .ui-brand-copy small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+}
+
 .brand-button {
   border: 0;
   background: none;
