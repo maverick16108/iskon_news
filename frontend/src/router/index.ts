@@ -42,6 +42,18 @@ const router = createRouter({
       meta: { title: 'Промпты', superadmin: true },
     },
     {
+      path: '/prompts/new',
+      name: 'prompt-new',
+      component: () => import('@/views/PromptEditView.vue'),
+      meta: { title: 'Новый шаблон', superadmin: true },
+    },
+    {
+      path: '/prompts/:id',
+      name: 'prompt-edit',
+      component: () => import('@/views/PromptEditView.vue'),
+      meta: { title: 'Правка шаблона', superadmin: true },
+    },
+    {
       path: '/settings/llm',
       name: 'llm-settings',
       component: () => import('@/views/LlmSettingsView.vue'),

@@ -261,7 +261,6 @@ onBeforeUnmount(() => {
             ☰<span class="sr-only">Открыть навигацию</span>
           </button>
           <div class="ui-page-heading">
-            <div class="ui-eyebrow">t.me/iskconru</div>
             <h1 class="ui-page-title">{{ title }}</h1>
           </div>
         </div>

@@ -1,23 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
-import { api, type PlaceholderInfo, type PromptTemplate } from '@/api'
+import { api, type PromptTemplate } from '@/api'
 import { formatDate } from '@/labels'
 
 const prompts = ref<PromptTemplate[]>([])
-const placeholders = ref<PlaceholderInfo[]>([])
 const loading = ref(true)
-const saving = ref(false)
 const error = ref('')
 const notice = ref('')
-
-const editing = ref<PromptTemplate | null>(null)
-const creating = ref(false)
-const bodyField = ref<HTMLTextAreaElement | null>(null)
-
-const form = reactive({ name: '', description: '', body: '', is_default: false })
-
-const isOpen = computed(() => creating.value || editing.value !== null)
 
 async function load() {
   loading.value = true
@@ -27,79 +17,6 @@ async function load() {
     error.value = e instanceof Error ? e.message : 'Не удалось загрузить шаблоны'
   } finally {
     loading.value = false
-  }
-}
-
-function startCreate() {
-  const base = prompts.value.find((p) => p.is_default) ?? prompts.value[0]
-  Object.assign(form, {
-    name: '',
-    description: '',
-    // Отталкиваемся от действующего шаблона: писать промпт с нуля незачем
-    body: base?.body ?? '',
-    is_default: false,
-  })
-  editing.value = null
-  creating.value = true
-}
-
-function startEdit(prompt: PromptTemplate) {
-  Object.assign(form, {
-    name: prompt.name,
-    description: prompt.description ?? '',
-    body: prompt.body,
-    is_default: prompt.is_default,
-  })
-  creating.value = false
-  editing.value = prompt
-}
-
-function close() {
-  creating.value = false
-  editing.value = null
-}
-
-function insertPlaceholder(token: string) {
-  const field = bodyField.value
-  if (!field) {
-    form.body += token
-    return
-  }
-  const start = field.selectionStart ?? form.body.length
-  const end = field.selectionEnd ?? start
-  form.body = form.body.slice(0, start) + token + form.body.slice(end)
-  // Возвращаем курсор сразу после вставленного плейсхолдера
-  requestAnimationFrame(() => {
-    field.focus()
-    field.setSelectionRange(start + token.length, start + token.length)
-  })
-}
-
-async function save() {
-  saving.value = true
-  error.value = ''
-  notice.value = ''
-  try {
-    const payload = {
-      name: form.name.trim(),
-      description: form.description.trim() || null,
-      body: form.body,
-      is_default: form.is_default,
-    }
-
-    if (editing.value) {
-      await api.patch<PromptTemplate>(`/api/prompts/${editing.value.id}`, payload)
-      notice.value = `Шаблон «${payload.name}» сохранён`
-    } else {
-      await api.post<PromptTemplate>('/api/prompts', payload)
-      notice.value = `Шаблон «${payload.name}» создан`
-    }
-    close()
-    await load()
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось сохранить'
-  } finally {
-    saving.value = false
   }
 }
 
@@ -126,14 +43,7 @@ async function remove(prompt: PromptTemplate) {
   }
 }
 
-onMounted(async () => {
-  try {
-    placeholders.value = await api.get<PlaceholderInfo[]>('/api/prompts/placeholders')
-  } catch {
-    // подсказки не критичны
-  }
-  await load()
-})
+onMounted(load)
 </script>
 
 <template>
@@ -141,82 +51,14 @@ onMounted(async () => {
     <div class="ws-control-bar">
       <span class="muted" style="font-size: 13px">Шаблонов: {{ prompts.length }}</span>
       <span class="row-end">
-        <button class="ws-btn ws-btn-primary" @click="isOpen ? close() : startCreate()">
-          {{ isOpen ? 'Отмена' : 'Новый шаблон' }}
-        </button>
+        <RouterLink class="ws-btn ws-btn-primary" :to="{ name: 'prompt-new' }">
+          Новый шаблон
+        </RouterLink>
       </span>
     </div>
 
     <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
     <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
-
-    <section v-if="isOpen" class="ws-surface" style="margin-bottom: 16px">
-      <div class="ws-surface-head">
-        <h2 class="ws-surface-title">
-          {{ editing ? `Правка: ${editing.name}` : 'Новый шаблон' }}
-        </h2>
-      </div>
-
-      <form class="ws-surface-body stack" @submit.prevent="save">
-        <div class="ws-field">
-          <label class="ws-field-label">Название</label>
-          <input v-model="form.name" class="ws-input" required maxlength="255" />
-        </div>
-
-        <div class="ws-field">
-          <label class="ws-field-label">Пояснение (необязательно)</label>
-          <input
-            v-model="form.description"
-            class="ws-input"
-            maxlength="512"
-            placeholder="Для каких источников подходит"
-          />
-        </div>
-
-        <div class="ws-field">
-          <label class="ws-field-label">Инструкция для модели</label>
-          <div>
-            <textarea
-              ref="bodyField"
-              v-model="form.body"
-              class="ws-input prompt-body"
-              required
-              minlength="20"
-            ></textarea>
-            <div class="placeholder-list" style="margin-top: 8px">
-              <button
-                v-for="item in placeholders"
-                :key="item.token"
-                type="button"
-                class="placeholder-chip"
-                :title="item.description"
-                @click="insertPlaceholder(item.token)"
-              >
-                {{ item.token }}
-              </button>
-            </div>
-            <small class="muted">
-              Плейсхолдеры подставляются при обращении к модели. Блок «Формат ответа»
-              дописывается автоматически и в шаблоне не нужен — без него перестал бы
-              разбираться ответ модели.
-            </small>
-          </div>
-        </div>
-
-        <label class="row" style="gap: 6px; cursor: pointer">
-          <input v-model="form.is_default" type="checkbox" :disabled="editing?.is_default" />
-          <span>Применять к источникам, которым свой шаблон не назначен</span>
-        </label>
-
-        <div class="row">
-          <button class="ws-btn ws-btn-primary" type="submit" :disabled="saving">
-            {{ saving ? 'Сохраняем…' : 'Сохранить' }}
-          </button>
-          <button class="ws-btn ws-btn-quiet" type="button" @click="close">Отмена</button>
-        </div>
-
-      </form>
-    </section>
 
     <section class="ws-surface">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Шаблоны промптов</h2></div>
@@ -257,7 +99,12 @@ onMounted(async () => {
               </td>
               <td>
                 <div class="row" style="gap: 6px; justify-content: flex-end">
-                  <button class="ws-btn ws-btn-quiet" @click="startEdit(prompt)">Править</button>
+                  <RouterLink
+                    class="ws-btn ws-btn-quiet"
+                    :to="{ name: 'prompt-edit', params: { id: prompt.id } }"
+                  >
+                    Править
+                  </RouterLink>
                   <button
                     v-if="!prompt.is_default"
                     class="ws-btn ws-btn-quiet"

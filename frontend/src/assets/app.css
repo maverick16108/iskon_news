@@ -1070,10 +1070,19 @@ textarea.ws-input {
 /* --- Промпты ------------------------------------------------------------- */
 
 .prompt-body {
-  min-height: 520px;
+  min-height: 460px;
   font-family: var(--mono, ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.5;
+  /* Тянется и мышью за угол, и кнопкой «Развернуть поле» */
+  resize: vertical;
+}
+
+/* Развёрнутое поле занимает почти весь экран.
+   Высоту делим на масштаб: внутри zoom единица vh считается от полной
+   высоты окна, а потом ещё умножается на масштаб. */
+.prompt-body.is-expanded {
+  min-height: calc(100vh / var(--ui-scale, 1) - 220px);
 }
 
 .prompt-preview {
