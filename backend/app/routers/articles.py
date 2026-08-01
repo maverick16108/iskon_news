@@ -15,6 +15,7 @@ from app.models import (
     Article,
     ArticleImage,
     ArticleMention,
+    ArticleVideo,
     ArticleView,
     ContentQuality,
     Post,
@@ -22,7 +23,10 @@ from app.models import (
     Source,
     TelegramChannel,
 )
-from app.parsers.fetch import FetchError
+from app.parsers.fetch import FetchError, extract_text, fetch_html
+from app.parsers.images import extract_images
+from app.parsers.ingest import MIN_FULL_TEXT_CHARS
+from app.parsers.videos import extract_videos
 from app.parsers.imagecache import ensure_cached, local_path, media_type_for, save_upload
 from app.telegram.client import TelegramError, render_html, send_post
 from app.telegram.config import current as telegram_config
@@ -133,7 +137,11 @@ async def list_articles(
             seen,
             (seen.c.article_id == Article.id) & (seen.c.user_id == user.id),
         )
-        .options(selectinload(Article.post), selectinload(Article.images))
+        .options(
+            selectinload(Article.post),
+            selectinload(Article.images),
+            selectinload(Article.videos),
+        )
     )
 
     if source_id is not None:
@@ -171,6 +179,7 @@ async def list_articles(
             post_status=article.post.status if article.post else None,
             post_char_count=article.post.char_count if article.post else None,
             image_count=len(article.images),
+            video_count=len(article.videos),
             is_viewed=viewed_at is not None,
             viewed_at=viewed_at,
             # В ленте хватает списка названий: подробности — в самой новости
@@ -190,7 +199,11 @@ async def get_article(article_id: int, db: DbDep, user: CurrentUser):
     article = await db.scalar(
         select(Article)
         .where(Article.id == article_id)
-        .options(selectinload(Article.post), selectinload(Article.images))
+        .options(
+            selectinload(Article.post),
+            selectinload(Article.images),
+            selectinload(Article.videos),
+        )
     )
     if article is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Статья не найдена")
@@ -212,6 +225,99 @@ async def get_article(article_id: int, db: DbDep, user: CurrentUser):
     own = await db.scalar(select(Source.name).where(Source.id == article.source_id))
     detail.repeats = [e for e in entries if e.source != own]
     return detail
+
+
+@router.post("/{article_id}/refetch", response_model=ArticleDetail)
+async def refetch_article(article_id: int, request: Request, db: DbDep, user: CurrentUser):
+    """Заново читает страницу источника: текст, картинки, ролики.
+
+    Нужно, когда сайт доложил материал после нашего обхода или когда
+    статью забрали до того, как заработало извлечение роликов.
+    """
+    article = await db.scalar(
+        select(Article)
+        .where(Article.id == article_id)
+        .options(selectinload(Article.images), selectinload(Article.videos))
+    )
+    if article is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Статья не найдена")
+
+    try:
+        html = await fetch_html(article.url)
+    except FetchError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Источник не ответил: {exc}") from exc
+
+    content = extract_text(html)
+    images = extract_images(html, article.url)
+    videos = extract_videos(html, article.url)
+
+    if content and len(content) >= MIN_FULL_TEXT_CHARS:
+        article.content = content
+        article.content_quality = ContentQuality.full
+    elif not article.content:
+        article.content_quality = (
+            ContentQuality.excerpt if article.summary else ContentQuality.empty
+        )
+
+    # Ролики просто заменяем: своего в них редактор не правит
+    article.videos = [
+        ArticleVideo(
+            url=video.url,
+            provider=video.provider,
+            video_id=video.video_id,
+            thumbnail_url=video.thumbnail_url,
+            position=index,
+        )
+        for index, video in enumerate(videos)
+    ]
+
+    # У записи лекции своих картинок нет — тогда берём обложку ролика
+    fresh = [(i.url, i.caption, i.width, i.height) for i in images]
+    if not fresh:
+        fresh = [(v.thumbnail_url, None, None, None) for v in videos if v.thumbnail_url]
+
+    # Загруженные редактором файлы и его отметки сохраняем: перечитывание
+    # обновляет то, что пришло с сайта, а не отменяет ручную работу
+    kept = {img.url for img in article.images if img.is_uploaded or img.url is None}
+    existing = {img.url: img for img in article.images if img.url not in kept}
+
+    for img in list(article.images):
+        if img.url not in kept and img.url not in {url for url, *_ in fresh}:
+            article.images.remove(img)
+
+    position = max((img.position for img in article.images), default=-1)
+    added = 0
+    for url, caption, width, height in fresh:
+        if url in existing or url in kept:
+            continue
+        position += 1
+        added += 1
+        article.images.append(
+            ArticleImage(
+                url=url,
+                caption=caption,
+                width=width,
+                height=height,
+                position=position,
+                is_selected=not article.images,
+            )
+        )
+
+    if not article.image_url and fresh:
+        article.image_url = fresh[0][0]
+
+    await write_audit(
+        db,
+        user=user,
+        action="article.refetch",
+        entity_type="article",
+        entity_id=article.id,
+        details={"картинок добавлено": added, "роликов": len(videos)},
+        request=request,
+    )
+    await db.commit()
+
+    return await get_article(article_id, db, user)
 
 
 @router.post("/{article_id}/rewrite", response_model=PostOut)

@@ -128,21 +128,23 @@ async def backfill_images(limit: int) -> int:
     """Догружает картинки к статьям, собранным до появления этой возможности."""
     from sqlalchemy.orm import selectinload
 
-    from app.models import Article, ArticleImage
+    from app.models import Article, ArticleImage, ArticleVideo
     from app.parsers.fetch import FetchError, fetch_html
-    from app.parsers.images import extract_images
+    from app.parsers.images import ExtractedImage, extract_images
+    from app.parsers.videos import extract_videos
 
     async with SessionFactory() as db:
         articles = list(
             await db.scalars(
                 select(Article)
-                .options(selectinload(Article.images))
+                .options(selectinload(Article.images), selectinload(Article.videos))
                 .order_by(Article.published_at.desc().nullslast())
                 .limit(limit)
             )
         )
-        todo = [a for a in articles if not a.images]
-        print(f"Статей без картинок: {len(todo)} из {len(articles)}")
+        # Заодно подбираем те, у кого нет роликов: раньше их не собирали вовсе
+        todo = [a for a in articles if not a.images or not a.videos]
+        print(f"Статей без картинок или роликов: {len(todo)} из {len(articles)}")
 
         total = 0
         for index, article in enumerate(todo, 1):
@@ -151,27 +153,58 @@ async def backfill_images(limit: int) -> int:
                     await asyncio.sleep(1.5)  # не долбим сайт подряд
                 html = await fetch_html(article.url)
                 images = extract_images(html, article.url)
+                videos = extract_videos(html, article.url)
             except FetchError as exc:
                 print(f"  [{index}/{len(todo)}] {article.title[:50]}: {exc}")
                 continue
 
-            article.images = [
-                ArticleImage(
-                    url=image.url,
-                    caption=image.caption,
-                    width=image.width,
-                    height=image.height,
+            article.videos = [
+                ArticleVideo(
+                    url=video.url,
+                    provider=video.provider,
+                    video_id=video.video_id,
+                    thumbnail_url=video.thumbnail_url,
                     position=position,
-                    is_selected=position == 0,
                 )
-                for position, image in enumerate(images)
+                for position, video in enumerate(videos)
             ]
-            if images and not article.image_url:
-                article.image_url = images[0].url
 
-            total += len(images)
+            # Уже собранные картинки не трогаем: у редактора там свой выбор
+            # и загруженные вручную файлы, а переприсваивание списка вдобавок
+            # упирается в уникальный ключ (article_id, url).
+            added_images = 0
+            if not article.images:
+                # У записей лекций своих картинок нет — берём обложку ролика
+                if not images:
+                    images = [
+                        ExtractedImage(
+                            url=video.thumbnail_url, caption=None, width=None, height=None
+                        )
+                        for video in videos
+                        if video.thumbnail_url
+                    ]
+
+                article.images = [
+                    ArticleImage(
+                        url=image.url,
+                        caption=image.caption,
+                        width=image.width,
+                        height=image.height,
+                        position=position,
+                        is_selected=position == 0,
+                    )
+                    for position, image in enumerate(images)
+                ]
+                added_images = len(images)
+                if images and not article.image_url:
+                    article.image_url = images[0].url
+
+            total += added_images
             await db.commit()
-            print(f"  [{index}/{len(todo)}] {article.title[:50]}: {len(images)} шт.")
+            print(
+                f"  [{index}/{len(todo)}] {article.title[:50]}: "
+                f"картинок {added_images}, роликов {len(videos)}"
+            )
 
         print(f"\nВсего добавлено картинок: {total}")
     return 0

@@ -159,11 +159,39 @@ class Article(Base):
         cascade="all, delete-orphan",
         order_by="ArticleImage.position",
     )
+    videos: Mapped[list[ArticleVideo]] = relationship(
+        back_populates="article",
+        cascade="all, delete-orphan",
+        order_by="ArticleVideo.position",
+    )
 
     @property
     def text_for_ai(self) -> str:
         """Текст, который уходит в модель: полный, а если его нет — анонс."""
         return self.content or self.summary or ""
+
+
+class ArticleVideo(Base):
+    """Видеоролик из новости.
+
+    У dandavats заметная часть публикаций — записи лекций: на странице один
+    плеер и почти нет текста. Ссылку редактору нужно видеть, а обложку ролика
+    забираем в галерею — иначе такой пост уходит вовсе без иллюстрации.
+    """
+
+    __tablename__ = "article_videos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True
+    )
+    article: Mapped[Article] = relationship(back_populates="videos")
+
+    url: Mapped[str] = mapped_column(String(1024))
+    provider: Mapped[str] = mapped_column(String(32))       # youtube, vimeo, rutube, vk, file
+    video_id: Mapped[str | None] = mapped_column(String(64))
+    thumbnail_url: Mapped[str | None] = mapped_column(String(1024))
+    position: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class ArticleMention(Base):

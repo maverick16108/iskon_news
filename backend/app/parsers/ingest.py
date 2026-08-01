@@ -20,12 +20,14 @@ from app.models import (
     Article,
     ArticleImage,
     ArticleMention,
+    ArticleVideo,
     ContentQuality,
     Source,
     title_key_for,
 )
 from app.parsers.fetch import FetchError, extract_text, fetch_html
 from app.parsers.images import extract_images
+from app.parsers.videos import extract_videos
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +60,7 @@ class IngestResult:
     added: int = 0
     with_full_text: int = 0
     images: int = 0
+    videos: int = 0
     repeats: int = 0            # уже были в ленте от другого источника
     skipped_boilerplate: int = 0
     _seen_texts: set[str] = field(default_factory=set, repr=False)
@@ -69,6 +72,7 @@ class IngestResult:
             "added": self.added,
             "with_full_text": self.with_full_text,
             "images": self.images,
+            "videos": self.videos,
             "repeats": self.repeats,
         }
 
@@ -108,6 +112,7 @@ async def ingest(
 
         content: str | None = None
         images: list = []
+        videos: list = []
         try:
             if fetched_count:
                 await asyncio.sleep(POLITE_DELAY_SECONDS)
@@ -115,6 +120,7 @@ async def ingest(
             fetched_count += 1
             content = extract_text(html)
             images = extract_images(html, post.url)
+            videos = extract_videos(html, post.url)
         except FetchError as exc:
             log.warning("Полный текст %s недоступен: %s", post.url, exc)
 
@@ -162,11 +168,39 @@ async def ingest(
             )
             for index, image in enumerate(images)
         ]
+        article.videos = [
+            ArticleVideo(
+                url=video.url,
+                provider=video.provider,
+                video_id=video.video_id,
+                thumbnail_url=video.thumbnail_url,
+                position=index,
+            )
+            for index, video in enumerate(videos)
+        ]
+
+        # У записи лекции своих картинок нет — только обложка ролика.
+        # Без неё пост уходит без иллюстрации, поэтому подставляем её.
+        if not article.images:
+            posters = [v for v in videos if v.thumbnail_url]
+            article.images = [
+                ArticleImage(
+                    url=video.thumbnail_url,
+                    caption=None,
+                    position=index,
+                    is_selected=index == 0,
+                )
+                for index, video in enumerate(posters)
+            ]
+            if posters and not article.image_url:
+                article.image_url = posters[0].thumbnail_url
+
         session.add(article)
         await session.flush()
         await _remember_mention(session, article.id, source.id, post.url)
         result.added += 1
         result.images += len(images)
+        result.videos += len(videos)
 
     source.last_fetched_at = datetime.now(timezone.utc)
     source.last_error = None

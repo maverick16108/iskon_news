@@ -7,6 +7,7 @@ import {
   api,
   type ArticleDetail,
   type ArticleImage,
+  type ArticleVideo,
   type Post,
   type TelegramState,
 } from '@/api'
@@ -114,6 +115,47 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+const refetching = ref(false)
+
+/** Заново прочитать страницу источника. */
+async function refetchArticle() {
+  refetching.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const before = {
+      images: article.value?.images.length ?? 0,
+      videos: article.value?.videos.length ?? 0,
+      chars: article.value?.content?.length ?? 0,
+    }
+    article.value = await api.post<ArticleDetail>(`/api/articles/${articleId}/refetch`)
+
+    const images = article.value.images.length - before.images
+    const videos = article.value.videos.length - before.videos
+    const chars = (article.value.content?.length ?? 0) - before.chars
+
+    const changes = [
+      images ? `фотографий ${images > 0 ? '+' : ''}${images}` : '',
+      videos ? `роликов ${videos > 0 ? '+' : ''}${videos}` : '',
+      chars ? `текста ${chars > 0 ? '+' : ''}${chars} симв.` : '',
+    ].filter(Boolean)
+
+    notice.value = changes.length
+      ? `Перечитано: ${changes.join(', ')}`
+      : 'Перечитано, на странице источника ничего не изменилось'
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось перечитать новость'
+  } finally {
+    refetching.value = false
+  }
+}
+
+/** Вставляет ссылку на ролик в конец текста поста. */
+function addVideoLink(video: ArticleVideo) {
+  if (!post.value || draft.value.body.includes(video.url)) return
+  draft.value.body = `${draft.value.body.trimEnd()}\n\n${video.url}`
 }
 
 /** Куда уйдёт пост — подтягиваем, чтобы предупредить до нажатия кнопки. */
@@ -452,6 +494,15 @@ onMounted(async () => {
         <a class="ws-btn ws-btn-quiet" :href="article.url" target="_blank" rel="noopener">
           Открыть оригинал
         </a>
+        <button
+          class="ws-btn ws-btn-quiet"
+          type="button"
+          :disabled="refetching"
+          title="Заново прочитать страницу источника: текст, фотографии и ролики"
+          @click="refetchArticle"
+        >
+          {{ refetching ? 'Перечитываем…' : 'Перечитать новость' }}
+        </button>
         <a
           v-if="post?.telegram_url"
           class="ws-btn ws-btn-quiet"
@@ -676,6 +727,40 @@ onMounted(async () => {
                   hidden
                   @change="uploadFiles(($event.target as HTMLInputElement).files)"
                 />
+              </div>
+            </div>
+
+            <!-- Ролики из новости. Файл в канал не отправить — Telegram
+                 покажет ссылку карточкой, поэтому её и вставляем в текст. -->
+            <div v-if="article.videos.length" class="ws-field">
+              <label class="ws-field-label">
+                Видео из новости
+                <span class="muted">({{ article.videos.length }})</span>
+              </label>
+              <div class="video-list">
+                <div v-for="video in article.videos" :key="video.id" class="video-card">
+                  <img
+                    v-if="video.thumbnail_url"
+                    class="video-poster"
+                    :src="video.thumbnail_url"
+                    alt=""
+                    loading="lazy"
+                  />
+                  <div class="video-body">
+                    <a class="video-link" :href="video.url" target="_blank" rel="noopener">
+                      {{ video.url }}
+                    </a>
+                    <div class="muted" style="font-size: 11px">{{ video.provider }}</div>
+                  </div>
+                  <button
+                    class="ws-btn ws-btn-quiet"
+                    type="button"
+                    :disabled="!post || draft.body.includes(video.url)"
+                    @click="addVideoLink(video)"
+                  >
+                    {{ draft.body.includes(video.url) ? 'Уже в тексте' : 'Вставить в текст' }}
+                  </button>
+                </div>
               </div>
             </div>
 

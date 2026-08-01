@@ -118,6 +118,14 @@ export interface Article {
   fetched_at: string
 }
 
+/** Ролик из новости. */
+export interface ArticleVideo {
+  id: number
+  url: string
+  provider: string
+  thumbnail_url: string | null
+}
+
 export interface ArticleImage {
   id: number
   /** У загруженных редактором адреса нет */
@@ -136,6 +144,7 @@ export interface ArticleListItem extends Article {
   post_status: PostStatus | null
   post_char_count: number | null
   image_count: number
+  video_count: number
   is_viewed: boolean
   viewed_at: string | null
   repeat_sources: string[]      // другие источники с этим же сюжетом
@@ -160,6 +169,7 @@ export interface ArticleDetail extends Article {
   content: string | null
   post: Post | null
   images: ArticleImage[]
+  videos: ArticleVideo[]
   repeats: RepeatEntry[]
 }
 
@@ -181,6 +191,7 @@ export interface FetchResult {
   added: number
   with_full_text: number
   images: number
+  videos: number
   /** Уже были в ленте от другого источника */
   repeats: number
 }

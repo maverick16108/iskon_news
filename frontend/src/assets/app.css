@@ -1179,9 +1179,15 @@ html:not(.kbd-nav) label:focus-within {
   outline-offset: 1px;
 }
 
+/* Гасим саму иконку, а не кнопку целиком: прозрачность родителя
+   распространяется и на ::after, и подсказка «Проверяем…» просвечивала
+   насквозь вместе с тем, что под ней. */
 .icon-btn:disabled {
-  opacity: 0.45;
   cursor: default;
+}
+
+.icon-btn:disabled .nav-icon {
+  opacity: 0.45;
 }
 
 .icon-btn.is-danger:hover:not(:disabled) {
@@ -1286,6 +1292,42 @@ html:not(.kbd-nav) label:focus-within {
   gap: 7px;
   cursor: pointer;
   user-select: none;
+}
+
+.video-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.video-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--scheme-border-soft, #e3e9f0);
+  border-radius: 10px;
+  background: var(--scheme-surface-muted, #fbfcfd);
+}
+
+.video-poster {
+  flex: none;
+  width: 96px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--scheme-surface-hover, #eef2f7);
+}
+
+.video-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.video-link {
+  display: block;
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .publish-hint {

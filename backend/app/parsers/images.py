@@ -17,6 +17,12 @@ from bs4 import BeautifulSoup, Tag
 
 log = logging.getLogger(__name__)
 
+# Обложки видеороликов. Проверяются до фильтра служебной графики: в нём
+# есть «youtube», и обложка ролика с img.youtube.com отсеивалась вместе с
+# иконками соцсетей. У публикаций с лекциями это единственная картинка,
+# и без неё пост уходил вовсе без иллюстрации.
+VIDEO_POSTER_HOSTS = ("img.youtube.com", "i.ytimg.com", "i.vimeocdn.com")
+
 # Служебная графика — по пути или имени файла
 JUNK_PATTERNS = re.compile(
     r"(logo|icon|sprite|avatar|placeholder|spacer|blank|pixel|emoji|favicon"
@@ -135,8 +141,18 @@ def _caption_for(img: Tag, url: str) -> str | None:
     return _caption_from_filename(url)
 
 
+def is_video_poster(url: str) -> bool:
+    """Обложка видеоролика — картинка содержательная, а не служебная."""
+    return urlparse(url).netloc.lower() in VIDEO_POSTER_HOSTS
+
+
 def _looks_like_junk(url: str, width: int | None, height: int | None) -> bool:
     path = urlparse(url).path.lower()
+
+    # Обложку ролика пропускаем мимо всех проверок: она и по имени похожа
+    # на служебную графику, и размеры у неё в разметке обычно не проставлены
+    if is_video_poster(url):
+        return False
 
     if path.endswith(JUNK_EXTENSIONS):
         return True

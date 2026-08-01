@@ -130,6 +130,13 @@ class ImageOut(ORMModel):
     is_selected: bool
 
 
+class VideoOut(ORMModel):
+    id: int
+    url: str
+    provider: str
+    thumbnail_url: str | None
+
+
 class ImageUpdate(BaseModel):
     is_selected: bool | None = None
     caption_ru: str | None = Field(default=None, max_length=300)
@@ -161,6 +168,7 @@ class ArticleDetail(ArticleOut):
     content: str | None
     post: PostOut | None
     images: list[ImageOut]
+    videos: list[VideoOut] = []
     repeats: list[RepeatEntry] = []   # тот же сюжет в других источниках
 
 
@@ -169,6 +177,7 @@ class ArticleListItem(ArticleOut):
     post_status: PostStatus | None
     post_char_count: int | None
     image_count: int
+    video_count: int = 0
     is_viewed: bool = False          # открывал ли эту новость текущий пользователь
     viewed_at: datetime | None = None
     # Все источники, принёсшие этот сюжет: сам источник статьи, все, кто
