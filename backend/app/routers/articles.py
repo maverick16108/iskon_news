@@ -92,26 +92,42 @@ async def collect_repeats(
     for article_id, source_name, url in mentions:
         by_article[article_id].append(RepeatEntry(source=source_name, url=url))
 
-    # Статьи-двойники под другими адресами
-    twins: dict[str, list[tuple[int, str, str]]] = {}
+    # Статьи-двойники под другими адресами. Состояние их постов важно:
+    # публиковать один и тот же сюжет дважды не нужно, и редактор должен
+    # видеть это прямо в ленте, а не открывая каждую карточку.
+    twins: dict[str, list[RepeatEntry]] = {}
     if keys:
         rows = (
             await db.execute(
-                select(Article.id, Article.title_key, Source.name, Article.url)
+                select(
+                    Article.id,
+                    Article.title_key,
+                    Source.name,
+                    Article.url,
+                    Post.status,
+                    Post.telegram_url,
+                )
                 .join(Source, Source.id == Article.source_id)
+                .outerjoin(Post, Post.article_id == Article.id)
                 .where(Article.title_key.in_(keys))
             )
         ).all()
-        for twin_id, key, source_name, url in rows:
-            twins.setdefault(key, []).append((twin_id, source_name, url))
+        for twin_id, key, source_name, url, post_status, telegram_url in rows:
+            twins.setdefault(key, []).append(
+                RepeatEntry(
+                    source=source_name,
+                    url=url,
+                    article_id=twin_id,
+                    post_status=post_status,
+                    telegram_url=telegram_url,
+                )
+            )
 
     for article in articles:
-        for twin_id, source_name, url in twins.get(article.title_key or "", []):
-            if twin_id == article.id:
+        for entry in twins.get(article.title_key or "", []):
+            if entry.article_id == article.id:
                 continue
-            by_article[article.id].append(
-                RepeatEntry(source=source_name, url=url, article_id=twin_id)
-            )
+            by_article[article.id].append(entry)
 
     return by_article
 
@@ -174,9 +190,17 @@ async def list_articles(
         column = SORT_COLUMNS.get(sort, Article.published_at)
 
     direction = column.asc() if ascending else column.desc()
+
+    # За один заход приходит сразу несколько десятков новостей с одинаковым
+    # временем сбора, и порядок внутри такой пачки задавать нечем, кроме
+    # даты самой новости. Иначе свежее и полугодовалое идут вперемешку.
+    tiebreak = [Article.published_at.desc().nullslast(), Article.id.desc()]
+    if sort == "published":
+        tiebreak = [Article.fetched_at.desc(), Article.id.desc()]
+
     # nullslast независимо от направления: статьи без даты или без поста
     # всегда внизу, иначе они забивают первую страницу
-    query = query.order_by(direction.nullslast(), Article.id.desc())
+    query = query.order_by(direction.nullslast(), *tiebreak)
 
     rows = (await db.execute(query.limit(limit).offset(offset))).all()
     repeats = await collect_repeats(db, [article for article, _, _ in rows])
@@ -197,6 +221,9 @@ async def list_articles(
             ),
             repeat_article_ids=sorted(
                 {e.article_id for e in repeats.get(article.id, []) if e.article_id}
+            ),
+            repeat_published=any(
+                e.post_status is PostStatus.published for e in repeats.get(article.id, [])
             ),
         )
         for article, source_name, viewed_at in rows

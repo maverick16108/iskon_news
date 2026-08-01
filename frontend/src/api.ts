@@ -157,6 +157,8 @@ export interface ArticleListItem extends Article {
   viewed_at: string | null
   repeat_sources: string[]      // другие источники с этим же сюжетом
   repeat_article_ids: number[]  // двойники под своими адресами
+  /** Этот же сюжет уже публиковали в другой карточке */
+  repeat_published: boolean
 }
 
 /** Уйдёт ли пост в канал при публикации. Видно любому вошедшему. */
@@ -171,6 +173,9 @@ export interface RepeatEntry {
   source: string
   url: string | null
   article_id: number | null
+  /** Состояние поста у двойника: публиковали этот сюжет или нет */
+  post_status: PostStatus | null
+  telegram_url: string | null
 }
 
 export interface ArticleDetail extends Article {

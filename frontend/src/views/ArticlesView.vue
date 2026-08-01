@@ -462,9 +462,15 @@ watch([sourceFilter, statusFilter, includeArchive], load)
                 <span
                   v-if="article.repeat_sources.length"
                   class="ws-badge repeat-badge"
-                  :title="`Этот же сюжет есть в источниках: ${article.repeat_sources.join(', ')}`"
+                  :class="{ 'is-published': article.repeat_published }"
+                  :title="
+                    article.repeat_published
+                      ? `Этот сюжет уже публиковали в другой карточке. Источники: ${article.repeat_sources.join(', ')}`
+                      : `Этот же сюжет есть в источниках: ${article.repeat_sources.join(', ')}`
+                  "
                 >
-                  повтор · {{ article.repeat_sources.join(', ') }}
+                  повтор{{ article.repeat_published ? ', уже опубликован' : '' }} ·
+                  {{ article.repeat_sources.join(', ') }}
                 </span>
               </td>
               <td>{{ article.source_name }}</td>

@@ -605,6 +605,22 @@ onMounted(async () => {
                     тот же адрес
                   </a>
                   <span v-else class="muted">тот же адрес</span>
+                  <!-- Публиковать один сюжет дважды не нужно, поэтому
+                       состояние поста двойника показываем прямо здесь -->
+                  <template v-if="entry.post_status">
+                    —
+                    <span class="ws-badge" :class="POST_STATUS_TONE[entry.post_status]">
+                      {{ POST_STATUS_LABELS[entry.post_status] }}
+                    </span>
+                    <a
+                      v-if="entry.telegram_url"
+                      :href="entry.telegram_url"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      пост в канале
+                    </a>
+                  </template>
                 </li>
               </ul>
             </div>

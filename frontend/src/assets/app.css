@@ -1455,6 +1455,14 @@ html:not(.kbd-nav) label:focus-within {
   outline-offset: 2px;
 }
 
+/* Повтор, который уже публиковали — красный: это предупреждение,
+   а не справка. Второй раз тот же сюжет в канал не нужен. */
+.repeat-badge.is-published {
+  background: var(--scheme-danger-soft, #fdf0ee);
+  border-color: var(--scheme-danger, #d96555);
+  color: var(--scheme-danger, #a33a29);
+}
+
 .channel-switch {
   display: inline-flex;
   align-items: center;

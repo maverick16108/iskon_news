@@ -167,6 +167,9 @@ class RepeatEntry(BaseModel):
     source: str
     url: str | None = None
     article_id: int | None = None   # если у повтора своя карточка в ленте
+    # Состояние поста у двойника: публиковали этот сюжет или ещё нет
+    post_status: PostStatus | None = None
+    telegram_url: str | None = None
 
 
 class ArticleDetail(ArticleOut):
@@ -189,6 +192,8 @@ class ArticleListItem(ArticleOut):
     # на неё сослался, и источники статей с таким же заголовком
     repeat_sources: list[str] = []
     repeat_article_ids: list[int] = []   # статьи-двойники под другими адресами
+    # Этот же сюжет уже публиковали в другой карточке
+    repeat_published: bool = False
 
 
 # --- Шаблоны промптов -------------------------------------------------------
