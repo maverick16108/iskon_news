@@ -1,4 +1,4 @@
-"""Разбор RSS/Atom-фидов и наполнение базы статьями."""
+"""Сбор новостей из источника: RSS-фид или помесячный архив."""
 
 from __future__ import annotations
 
@@ -9,20 +9,17 @@ from datetime import datetime, timezone
 from html import unescape
 
 import feedparser
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Article, ArticleImage, ContentQuality, Source
-from app.parsers.fetch import FetchError, extract_text, fetch_html
-from app.parsers.images import extract_images
+from app.models import Source, SourceKind
+from app.parsers.archive import collect_posts
+from app.parsers.fetch import FetchError
+from app.parsers.ingest import FoundPost, ingest
 
 log = logging.getLogger(__name__)
 
 # Хвост, который WordPress дописывает к анонсу в фиде
 WP_TAIL = re.compile(r"The post .*? appeared first on .*?\.\s*$", re.S)
-
-# Пауза между запросами к статьям одного источника
-POLITE_DELAY_SECONDS = 1.5
 
 
 def _strip_html(value: str) -> str:
@@ -56,92 +53,51 @@ def _categories(entry) -> list[str]:
     return [tag.get("term") for tag in entry.get("tags", []) or [] if tag.get("term")]
 
 
-async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) -> dict:
-    """Читает фид источника и добавляет новые статьи.
-
-    Возвращает сводку: сколько записей в фиде, сколько добавлено, сколько
-    статей удалось догрузить целиком.
-    """
+async def _posts_from_feed(source: Source) -> list[FoundPost]:
     feed = await asyncio.to_thread(feedparser.parse, source.url)
 
     if getattr(feed, "bozo", False) and not feed.entries:
-        raise FetchError(f"Не удалось разобрать фид: {getattr(feed, 'bozo_exception', 'неизвестная ошибка')}")
+        raise FetchError(
+            f"Не удалось разобрать фид: {getattr(feed, 'bozo_exception', 'неизвестная ошибка')}"
+        )
 
-    added = 0
-    full_text = 0
-    total_images = 0
-    entries = feed.entries[:limit]
-
-    for entry in entries:
-        url = entry.get("link")
-        title = entry.get("title")
+    posts: list[FoundPost] = []
+    for entry in feed.entries:
+        url, title = entry.get("link"), entry.get("title")
         if not url or not title:
             continue
-
-        exists = await session.scalar(select(Article.id).where(Article.url == url))
-        if exists:
-            continue
-
-        summary = _strip_html(entry.get("summary", ""))
-
-        # В фиде обычно только анонс — за полным текстом идём на саму страницу.
-        # Пауза между статьями: без неё dandavats.com начинает отдавать 429.
-        content: str | None = None
-        images: list = []
-        try:
-            if added:
-                await asyncio.sleep(POLITE_DELAY_SECONDS)
-            html = await fetch_html(url)
-            content = extract_text(html)
-            images = extract_images(html, url)
-        except FetchError as exc:
-            log.warning("Полный текст %s недоступен: %s", url, exc)
-
-        if content and len(content) > len(summary):
-            quality = ContentQuality.full
-            full_text += 1
-        elif summary:
-            content = None
-            quality = ContentQuality.excerpt
-        else:
-            quality = ContentQuality.empty
-
-        article = Article(
-            source_id=source.id,
-            url=url,
-            title=unescape(title).strip(),
-            author=entry.get("author"),
-            published_at=_parsed_datetime(entry),
-            summary=summary or None,
-            content=content,
-            content_quality=quality,
-            image_url=images[0].url if images else _first_image(entry),
-            categories=_categories(entry) or None,
-        )
-        # Первую картинку отмечаем сразу: в посте почти всегда нужна хотя бы одна
-        article.images = [
-            ArticleImage(
-                url=image.url,
-                caption=image.caption,
-                width=image.width,
-                height=image.height,
-                position=index,
-                is_selected=index == 0,
+        posts.append(
+            FoundPost(
+                url=url,
+                title=unescape(title),
+                published_at=_parsed_datetime(entry),
+                summary=_strip_html(entry.get("summary", "")) or None,
+                author=entry.get("author"),
+                categories=_categories(entry) or None,
+                fallback_image=_first_image(entry),
             )
-            for index, image in enumerate(images)
-        ]
-        session.add(article)
-        added += 1
-        total_images += len(images)
+        )
+    return posts
 
-    source.last_fetched_at = datetime.now(timezone.utc)
-    source.last_error = None
-    await session.commit()
 
-    return {
-        "source": source.name,
-        "entries": len(entries),
-        "added": added,
-        "with_full_text": full_text,
-        "images": total_images,
-    }
+async def _posts_from_archive(source: Source) -> list[FoundPost]:
+    found = await collect_posts(source.url, months_back=2, limit=60)
+    return [
+        FoundPost(url=post.url, title=post.title, published_at=post.published_at)
+        for post in found
+    ]
+
+
+async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) -> dict:
+    """Читает источник и добавляет новые статьи.
+
+    Возвращает сводку: сколько публикаций найдено, сколько добавлено,
+    у скольких удалось получить полный текст и сколько картинок собрано.
+    """
+    if source.kind is SourceKind.archive:
+        posts = await _posts_from_archive(source)
+    else:
+        posts = await _posts_from_feed(source)
+
+    result = await ingest(source, session, posts, limit=limit)
+    return result.as_dict(source.name)

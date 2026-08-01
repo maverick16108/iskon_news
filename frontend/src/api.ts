@@ -55,7 +55,7 @@ export const api = {
 export type Role = 'superadmin' | 'editor'
 export type PostStatus = 'draft' | 'generating' | 'generated' | 'edited' | 'published' | 'failed'
 export type ContentQuality = 'full' | 'excerpt' | 'empty'
-export type SourceKind = 'rss' | 'html'
+export type SourceKind = 'rss' | 'archive' | 'html'
 
 export interface User {
   id: number

@@ -59,8 +59,9 @@ class User(Base):
 # --------------------------------------------------------------------------
 
 class SourceKind(str, enum.Enum):
-    rss = "rss"    # RSS/Atom-фид
-    html = "html"  # страница со списком ссылок
+    rss = "rss"          # RSS/Atom-фид
+    archive = "archive"  # помесячный архив сайта: список «ARCHIVES» на главной
+    html = "html"        # страница со списком ссылок
 
 
 class Source(Base):

@@ -31,9 +31,11 @@ DEFAULT_SOURCES = [
         "fetch_interval_minutes": 60,
     },
     {
+        # У Dandavats читаем помесячный архив, а не RSS: в фид попадают
+        # ссылки на чужой блогспот с записями лекций вместо статей.
         "name": "Dandavats",
-        "url": "https://www.dandavats.com/?feed=rss2",
-        "kind": SourceKind.rss,
+        "url": "https://www.dandavats.com/",
+        "kind": SourceKind.archive,
         "signature_name": "Dandavats",
         "signature_suffix": "website",
         "fetch_interval_minutes": 60,

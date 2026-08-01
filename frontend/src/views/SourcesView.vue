@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { api, type FetchResult, type PromptTemplate, type Source } from '@/api'
+import { api, type FetchResult, type PromptTemplate, type Source, type SourceKind } from '@/api'
 import TableSkeleton from '@/components/TableSkeleton.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
@@ -18,17 +18,27 @@ const error = ref('')
 const notice = ref('')
 const showForm = ref(false)
 
-type SortKey = 'name' | 'url' | 'signature' | 'fetched' | 'prompt' | 'state'
+type SortKey = 'name' | 'url' | 'kind' | 'signature' | 'fetched' | 'prompt' | 'state'
 const sortKey = ref<SortKey>('name')
 const sortAsc = ref(true)
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'name', label: 'Название' },
   { key: 'url', label: 'Адрес' },
+  { key: 'kind', label: 'Тип' },
   { key: 'signature', label: 'Подпись' },
   { key: 'fetched', label: 'Последний сбор' },
   { key: 'prompt', label: 'Промпт' },
   { key: 'state', label: 'Состояние' },
+]
+
+const KIND_OPTIONS: SelectOption[] = [
+  { value: 'rss', label: 'RSS-фид', hint: 'Адрес фида, например /feed/' },
+  {
+    value: 'archive',
+    label: 'Помесячный архив',
+    hint: 'Адрес главной; месяцы берутся из списка «ARCHIVES» и новые подхватываются сами',
+  },
 ]
 
 const SUFFIX_OPTIONS: SelectOption[] = [
@@ -40,7 +50,7 @@ const SUFFIX_OPTIONS: SelectOption[] = [
 const form = reactive({
   name: '',
   url: '',
-  kind: 'rss' as const,
+  kind: 'rss' as SourceKind,
   signature_name: '',
   signature_suffix: 'website',
   fetch_interval_minutes: 60,
@@ -59,6 +69,8 @@ function sortValue(source: Source, key: SortKey): string | number {
       return source.name.toLowerCase()
     case 'url':
       return source.url.toLowerCase()
+    case 'kind':
+      return source.kind
     case 'signature':
       return (source.signature_name || source.name).toLowerCase()
     case 'fetched':
@@ -119,6 +131,7 @@ async function create() {
       name: '',
       url: '',
       signature_name: '',
+      kind: 'rss',
       signature_suffix: 'website',
       fetch_interval_minutes: 60,
       prompt_template_id: '',
@@ -215,12 +228,25 @@ onMounted(async () => {
           <input v-model="form.name" class="ws-input" required placeholder="ISKCON News" />
         </div>
         <div class="ws-field">
-          <label class="ws-field-label">Адрес RSS-фида</label>
+          <label class="ws-field-label">Откуда брать новости</label>
+          <div>
+            <UiSelect v-model="form.kind" :options="KIND_OPTIONS" />
+            <small class="muted">
+              Архив подходит сайтам, у которых в RSS попадают чужие ссылки: там берутся
+              только собственные публикации.
+            </small>
+          </div>
+        </div>
+
+        <div class="ws-field">
+          <label class="ws-field-label">
+            {{ form.kind === 'archive' ? 'Адрес главной страницы' : 'Адрес RSS-фида' }}
+          </label>
           <input
             v-model="form.url"
             class="ws-input"
             required
-            placeholder="https://example.org/feed/"
+            :placeholder="form.kind === 'archive' ? 'https://example.org/' : 'https://example.org/feed/'"
           />
         </div>
         <div class="ws-field">
@@ -270,7 +296,7 @@ onMounted(async () => {
     <section class="ws-surface">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Источники</h2></div>
 
-      <TableSkeleton v-if="loading" :columns="[18, 26, 18, 14, 14, 10, 10]" :rows="4" />
+      <TableSkeleton v-if="loading" :columns="[16, 22, 8, 16, 13, 13, 8, 10]" :rows="4" />
       <div v-else-if="!sources.length" class="empty-state">Источники ещё не добавлены.</div>
 
       <div v-else class="table-wrap">
@@ -300,6 +326,7 @@ onMounted(async () => {
             <tr v-for="source in sorted" :key="source.id">
               <td>{{ source.name }}</td>
               <td class="mono" style="font-size: 12px">{{ source.url }}</td>
+              <td>{{ source.kind === 'archive' ? 'Архив' : source.kind === 'rss' ? 'RSS' : source.kind }}</td>
               <td>«{{ source.signature_name || source.name }}» {{ source.signature_suffix }}</td>
               <td>{{ formatDate(source.last_fetched_at) }}</td>
               <td>
