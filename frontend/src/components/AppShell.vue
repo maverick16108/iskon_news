@@ -136,7 +136,7 @@ onBeforeUnmount(() => {
           <GarudaMark :size="38" plain style="color: var(--scheme-accent, #1768ff)" />
           <span class="ui-brand-copy">
             Новости ИСККОН
-            <small>Подготовка публикаций</small>
+            <small>Портал публикаций</small>
           </span>
         </RouterLink>
         <button
