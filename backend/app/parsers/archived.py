@@ -22,10 +22,33 @@ from datetime import date, datetime, timedelta, timezone
 # а вот прошлогодняя лекция это уже переиздание.
 ARCHIVE_AFTER_DAYS = 60
 
-# Год, раньше которого дат не бывает: отсекает случайные числа вроде «7-31-99»
-MIN_YEAR = 2000
+# Год, раньше которого дат не бывает. Письма Прабхупады датируются
+# шестидесятыми-семидесятыми, поэтому граница не в двухтысячных.
+MIN_YEAR = 1900
+
+# Месяцы словами: в письмах и лекциях дату пишут именно так —
+# «25 March, 1970», «March 25, 1970»
+MONTHS = {
+    name: number
+    for number, names in enumerate(
+        [
+            ("january", "jan"), ("february", "feb"), ("march", "mar"),
+            ("april", "apr"), ("may",), ("june", "jun"),
+            ("july", "jul"), ("august", "aug"), ("september", "sep", "sept"),
+            ("october", "oct"), ("november", "nov"), ("december", "dec"),
+        ],
+        1,
+    )
+    for name in names
+}
+
+_MONTH_RE = "|".join(sorted(MONTHS, key=len, reverse=True))
 
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # 25 March, 1970
+    (re.compile(rf"\b(\d{{1,2}})\s+({_MONTH_RE})\.?,?\s+(20\d\d|19\d\d)\b", re.I), "dMy"),
+    # March 25, 1970
+    (re.compile(rf"\b({_MONTH_RE})\.?\s+(\d{{1,2}}),?\s+(20\d\d|19\d\d)\b", re.I), "Mdy"),
     # 2023.06.27 или 2023-06-27
     (re.compile(r"\b(20\d\d)[.\-/](\d{1,2})[.\-/](\d{1,2})\b"), "ymd"),
     # 27.06.2023 или 27/06/2023
@@ -56,6 +79,20 @@ def content_date(text: str) -> date | None:
     for pattern, order in _PATTERNS:
         match = pattern.search(head)
         if not match:
+            continue
+
+        if order == "dMy":
+            day, month_name, year = match.groups()
+            found = _build(int(year), MONTHS[month_name.lower()], int(day))
+            if found:
+                return found
+            continue
+
+        if order == "Mdy":
+            month_name, day, year = match.groups()
+            found = _build(int(year), MONTHS[month_name.lower()], int(day))
+            if found:
+                return found
             continue
 
         a, b, c = (int(part) for part in match.groups())

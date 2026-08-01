@@ -2,7 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { api, type ArticleListItem, type FetchResult, type PostStatus, type Source } from '@/api'
+import {
+  api,
+  type ArticleListItem,
+  type FetchResult,
+  type FetchSettings,
+  type PostStatus,
+  type Source,
+} from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
 import TableSkeleton from '@/components/TableSkeleton.vue'
 import ToastStack from '@/components/ToastStack.vue'
@@ -181,7 +188,7 @@ async function fetchAll() {
     if (archived) notice.value += `. Переизданий старых записей: ${archived} — скрыты из ленты`
     const tooOld = results.reduce((sum, r) => sum + r.too_old, 0)
     if (tooOld) notice.value += `. Старше заданной границы: ${tooOld} — не собирали`
-    await load()
+    await Promise.all([load(), loadSchedule()])
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Сбор не удался'
   } finally {
@@ -189,7 +196,33 @@ async function fetchAll() {
   }
 }
 
-const unprocessed = computed(() => articles.value.filter((a) => !a.post_status).length)
+const schedule = ref<FetchSettings | null>(null)
+
+async function loadSchedule() {
+  try {
+    schedule.value = await api.get<FetchSettings>('/api/settings/schedule')
+  } catch {
+    // не критично: лента работает и без этой строки
+  }
+}
+
+const lastRunLabel = computed(() => {
+  const row = schedule.value
+  if (!row?.last_run_at) return 'Сборщик ещё не запускался'
+  return `Последний сбор: ${formatDate(row.last_run_at)}`
+})
+
+const lastRunHint = computed(() => {
+  const row = schedule.value
+  if (!row) return ''
+  const parts = [row.last_result ?? '']
+  parts.push(
+    row.is_enabled
+      ? `Автоматический сбор включён, раз в ${row.interval_minutes} мин.`
+      : 'Автоматический сбор выключен.',
+  )
+  return parts.filter(Boolean).join(' · ')
+})
 const unviewed = computed(() => articles.value.filter((a) => !a.is_viewed).length)
 
 // С какого возраста новость уже не новость. Две недели: недельная задержка
@@ -270,7 +303,7 @@ onMounted(async () => {
   } catch {
     // список источников не критичен для ленты
   }
-  await load()
+  await Promise.all([load(), loadSchedule()])
 })
 
 onBeforeUnmount(() => {
@@ -319,8 +352,8 @@ watch([sourceFilter, statusFilter, includeArchive], load)
       </label>
 
       <span class="row-end row">
-        <span class="muted" style="font-size: 13px">
-          Показано: {{ articles.length }} · без поста: {{ unprocessed }}
+        <span class="muted" style="font-size: 13px" :title="lastRunHint">
+          {{ lastRunLabel }}
         </span>
         <button
           class="ws-btn ws-btn-quiet"
