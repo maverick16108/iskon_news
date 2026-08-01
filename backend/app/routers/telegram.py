@@ -19,7 +19,7 @@ from app.schemas import (
     TelegramSettingsUpdate,
     TelegramState,
 )
-from app.telegram.client import TelegramError, check_bot, check_channel
+from app.telegram.client import TelegramError, check_bot, check_channel, webhook_url
 from app.telegram.config import ensure_row
 
 log = logging.getLogger(__name__)
@@ -133,6 +133,14 @@ async def info(db: DbDep, admin: SuperAdmin):
             message=f"Бот не отвечает: {exc}",
         )
 
+    # Пока у бота стоит вебхук, Telegram не отдаёт getUpdates, и наш опрос
+    # команд от людей не получает. Отправке сообщений это не мешает,
+    # поэтому не ошибка, а предупреждение.
+    try:
+        hook = await webhook_url(row.bot_token)
+    except TelegramError:
+        hook = None
+
     return TelegramInfo(
         token_set=True,
         is_enabled=row.is_enabled,
@@ -141,6 +149,7 @@ async def info(db: DbDep, admin: SuperAdmin):
         bot_id=bot.get("id"),
         channels=[_channel_out(c) for c in row.channels],
         message="",
+        webhook_url=hook,
     )
 
 

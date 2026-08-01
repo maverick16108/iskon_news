@@ -244,6 +244,28 @@ export interface TelegramSettings {
   updated_by: string | null
 }
 
+/** Расписание автоматического обхода источников. */
+export interface FetchSettings {
+  is_enabled: boolean
+  interval_minutes: number
+  last_run_at: string | null
+  last_result: string | null
+  updated_at: string
+  updated_by: string | null
+}
+
+/** Кто подписан на оповещения бота. */
+export interface BotSubscriber {
+  id: number
+  chat_id: string
+  username: string | null
+  full_name: string | null
+  notify: boolean
+  is_blocked: boolean
+  created_at: string
+  last_notified_at: string | null
+}
+
 export interface TelegramChannel {
   id: number
   chat: string
@@ -262,6 +284,8 @@ export interface TelegramInfo {
   bot_id: number | null
   channels: TelegramChannel[]
   message: string
+  /** Пока стоит вебхук, бот не принимает команды от людей */
+  webhook_url: string | null
 }
 
 export const MAX_POST_CHARS = 1000

@@ -111,6 +111,18 @@ defineProps<{ name: string }>()
       <path d="M6.8 10.2l2.2 2.2 4.2-4.6" />
     </template>
 
+    <!-- Расписание: часы -->
+    <template v-else-if="name === 'clock'">
+      <circle cx="10" cy="10" r="7.2" />
+      <path d="M10 5.8V10l2.8 1.8" />
+    </template>
+
+    <!-- Подписчики бота: колокольчик -->
+    <template v-else-if="name === 'bell'">
+      <path d="M10 3.2a4.6 4.6 0 0 1 4.6 4.6c0 3.4 1.2 4.4 1.2 4.4H4.2s1.2-1 1.2-4.4A4.6 4.6 0 0 1 10 3.2z" />
+      <path d="M8.4 14.8a1.7 1.7 0 0 0 3.2 0" />
+    </template>
+
     <!-- Отметка в своём флажке -->
     <template v-else-if="name === 'tick'">
       <path d="M4.5 10.5l3.5 3.5 7.5-8" />

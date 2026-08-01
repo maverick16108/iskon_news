@@ -30,6 +30,12 @@ const router = createRouter({
       meta: { title: 'Источники' },
     },
     {
+      path: '/schedule',
+      name: 'schedule',
+      component: () => import('@/views/ScheduleView.vue'),
+      meta: { title: 'Расписание сбора' },
+    },
+    {
       path: '/users',
       name: 'users',
       component: () => import('@/views/UsersView.vue'),

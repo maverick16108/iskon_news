@@ -176,6 +176,15 @@ onBeforeUnmount(() => {
               <NavIcon name="sources" />
               <span>Источники</span>
             </RouterLink>
+            <RouterLink
+              class="ui-nav-link"
+              :to="{ name: 'schedule' }"
+              data-tip="Расписание сбора"
+              @click="navOpen = false"
+            >
+              <NavIcon name="clock" />
+              <span>Расписание сбора</span>
+            </RouterLink>
           </nav>
         </section>
 

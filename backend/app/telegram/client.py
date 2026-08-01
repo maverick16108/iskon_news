@@ -73,6 +73,16 @@ async def check_bot(token: str) -> dict:
     return await _request(token, "getMe", data={})
 
 
+async def webhook_url(token: str) -> str | None:
+    """Адрес вебхука, если он у бота стоит.
+
+    Важно знать: пока вебхук включён, Telegram не отдаёт getUpdates, и бот
+    не может принимать команды от людей. Отправке сообщений это не мешает.
+    """
+    info = await _request(token, "getWebhookInfo", data={})
+    return info.get("url") or None
+
+
 async def check_channel(token: str, channel: str) -> dict:
     """Виден ли канал и может ли бот в нём публиковать. Ничего не публикует."""
     me = await _request(token, "getMe", data={})

@@ -302,6 +302,8 @@ class TelegramInfo(BaseModel):
     bot_id: int | None = None
     channels: list[TelegramChannelOut] = []
     message: str = ""
+    # Пока стоит вебхук, бот не принимает команды от людей
+    webhook_url: str | None = None
 
 
 # --- Журнал ---------------------------------------------------------------
@@ -330,3 +332,31 @@ class FetchResult(BaseModel):
 
 class Message(BaseModel):
     detail: str
+
+
+# --- Расписание обхода и подписчики бота ------------------------------------
+
+class FetchSettingsOut(BaseModel):
+    is_enabled: bool
+    interval_minutes: int
+    last_run_at: datetime | None
+    last_result: str | None
+    updated_at: datetime
+    updated_by: str | None
+
+
+class FetchSettingsUpdate(BaseModel):
+    is_enabled: bool | None = None
+    # От пяти минут до недели: чаще — невежливо к сайтам, реже — смысла нет
+    interval_minutes: int | None = Field(default=None, ge=5, le=10080)
+
+
+class BotSubscriberOut(BaseModel):
+    id: int
+    chat_id: str
+    username: str | None
+    full_name: str | None
+    notify: bool
+    is_blocked: bool
+    created_at: datetime
+    last_notified_at: datetime | None

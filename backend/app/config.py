@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"
 
     telegram_bot_token: str = ""
+    # Куда бот зовёт редактора из сводки
+    portal_url: str = "https://news.prema.su"
     telegram_channel: str = "@iskconru"
 
     # Время жизни сессии, часов

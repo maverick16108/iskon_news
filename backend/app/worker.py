@@ -1,0 +1,159 @@
+"""Фоновые задачи: обход источников по расписанию и разговор бота.
+
+Обе задачи живут в том же процессе, что и приложение, — отдельной службы
+для них не нужно. Обе берут в PostgreSQL советующую блокировку: если
+приложение когда-нибудь запустят в несколько процессов, обходить источники
+и вычитывать сообщения бота всё равно будет ровно один.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select, text
+
+from app.db import SessionFactory
+from app.models import FetchSettings, Source
+from app.parsers.rss import fetch_feed
+from app.telegram.bot import collect_summary, notify_subscribers, poll_once
+from app.telegram.client import TelegramError
+from app.telegram.config import current as telegram_config
+
+log = logging.getLogger(__name__)
+
+# Ключи советующих блокировок: произвольные, лишь бы не совпадали с чужими
+LOCK_FETCH = 795_101
+LOCK_BOT = 795_102
+
+# Как часто просыпаемся, чтобы проверить, не пора ли обходить источники
+TICK_SECONDS = 60
+
+# Пауза после ошибки опроса бота, чтобы не молотить впустую
+BOT_ERROR_PAUSE_SECONDS = 30
+
+
+async def _try_lock(db, key: int) -> bool:
+    """Советующая блокировка на всё время жизни соединения."""
+    return bool(await db.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key}))
+
+
+async def get_fetch_settings(db) -> FetchSettings:
+    row = await db.scalar(select(FetchSettings).limit(1))
+    if row is None:
+        row = FetchSettings(is_enabled=False, interval_minutes=60)
+        db.add(row)
+        await db.flush()
+    return row
+
+
+def _due(row: FetchSettings, now: datetime) -> bool:
+    if not row.is_enabled:
+        return False
+    if row.last_run_at is None:
+        return True
+    return now - row.last_run_at >= timedelta(minutes=row.interval_minutes)
+
+
+async def run_fetch_round() -> dict[str, int]:
+    """Обходит активные источники. Возвращает, сколько добавлено по каждому."""
+    added: dict[str, int] = {}
+
+    async with SessionFactory() as db:
+        sources = list(await db.scalars(select(Source).where(Source.is_active.is_(True))))
+
+        for source in sources:
+            try:
+                result = await fetch_feed(source, db)
+            except Exception as exc:  # noqa: BLE001 — один источник не должен ронять обход
+                log.warning("Источник %s: %s", source.name, exc)
+                source.last_error = str(exc)
+                await db.commit()
+                continue
+
+            if result["added"]:
+                added[source.name] = result["added"]
+
+        row = await get_fetch_settings(db)
+        row.last_run_at = datetime.now(timezone.utc)
+        row.last_result = (
+            ", ".join(f"{name} — {count}" for name, count in added.items())
+            if added
+            else "новых публикаций нет"
+        )
+        await db.commit()
+
+    return added
+
+
+async def fetch_loop() -> None:
+    """Просыпается раз в минуту и обходит источники, когда подошёл срок."""
+    async with SessionFactory() as db:
+        if not await _try_lock(db, LOCK_FETCH):
+            log.info("Обход источников уже ведёт другой процесс — эта задача не нужна")
+            return
+
+        log.info("Планировщик обхода источников запущен")
+
+        while True:
+            try:
+                row = await get_fetch_settings(db)
+                await db.commit()
+
+                if _due(row, datetime.now(timezone.utc)):
+                    log.info("Пора обходить источники")
+                    added = await run_fetch_round()
+                    await _report(added)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 — планировщик не должен умирать
+                log.exception("Сбой в планировщике обхода")
+
+            await asyncio.sleep(TICK_SECONDS)
+
+
+async def _report(added: dict[str, int]) -> None:
+    """Шлёт подписчикам сводку о том, что принёс обход."""
+    if not added:
+        return
+
+    config = await telegram_config()
+    if not config.token:
+        return
+
+    async with SessionFactory() as db:
+        summary = await collect_summary(db, added)
+        delivered = await notify_subscribers(db, config.token, summary)
+
+    log.info("Сводка отправлена подписчикам: %d", delivered)
+
+
+async def bot_loop() -> None:
+    """Длинный опрос Telegram: отвечает людям, которые пишут боту."""
+    async with SessionFactory() as db:
+        if not await _try_lock(db, LOCK_BOT):
+            log.info("Бота уже опрашивает другой процесс")
+            return
+
+        log.info("Опрос бота запущен")
+
+        while True:
+            try:
+                config = await telegram_config()
+                if not config.token:
+                    await asyncio.sleep(TICK_SECONDS)
+                    continue
+
+                await poll_once(db, config.token)
+            except asyncio.CancelledError:
+                raise
+            except TelegramError as exc:
+                # Самая частая причина — у бота включён вебхук, и тогда
+                # Telegram отказывает в getUpdates. Ошибка постоянная,
+                # поэтому ждём подольше и не пишем в лог одно и то же чаще
+                log.warning("Опрос бота не удался: %s", exc)
+                await asyncio.sleep(BOT_ERROR_PAUSE_SECONDS)
+            except Exception:  # noqa: BLE001 — опрос не должен умирать
+                log.exception("Сбой в опросе бота")
+                await asyncio.sleep(BOT_ERROR_PAUSE_SECONDS)

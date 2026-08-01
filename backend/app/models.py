@@ -480,6 +480,62 @@ class LlmSettings(Base):
 # Журнал действий
 # --------------------------------------------------------------------------
 
+class FetchSettings(Base):
+    """Расписание обхода источников. Строка всегда одна."""
+
+    __tablename__ = "fetch_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Как часто обходить источники. Минуты, а не «час/день» строкой:
+    # так в интерфейсе можно и выбрать из списка, и задать своё число.
+    interval_minutes: Mapped[int] = mapped_column(Integer, default=60)
+
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_result: Mapped[str | None] = mapped_column(Text)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by: Mapped[User | None] = relationship()
+
+
+class BotSubscriber(Base):
+    """Кто подписан на оповещения бота.
+
+    Telegram не даёт спросить «кто мне писал» иначе как через getUpdates,
+    поэтому подписчик заводится в тот момент, когда сам напишет боту.
+    """
+
+    __tablename__ = "bot_subscribers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+
+    username: Mapped[str | None] = mapped_column(String(128))
+    full_name: Mapped[str | None] = mapped_column(String(255))
+
+    notify: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Смещение getUpdates хранится глобально, а не здесь; тут только человек
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)  # бот заблокирован у него
+
+
+class BotState(Base):
+    """Служебное состояние опроса Telegram. Строка всегда одна."""
+
+    __tablename__ = "bot_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Смещение getUpdates: без него бот на каждом круге перечитывал бы
+    # одни и те же сообщения и слал приветствие снова и снова
+    update_offset: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 

@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { api, type TelegramChannel, type TelegramInfo, type TelegramSettings } from '@/api'
+import {
+  api,
+  type BotSubscriber,
+  type TelegramChannel,
+  type TelegramInfo,
+  type TelegramSettings,
+} from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
 import ToastStack from '@/components/ToastStack.vue'
 import { formatDate } from '@/labels'
@@ -105,6 +111,41 @@ async function checkChannel(channel: TelegramChannel) {
   }
 }
 
+const subscribers = ref<BotSubscriber[]>([])
+
+async function loadSubscribers() {
+  try {
+    subscribers.value = await api.get<BotSubscriber[]>('/api/settings/schedule/subscribers')
+  } catch {
+    // список подписчиков не критичен для остального экрана
+  }
+}
+
+async function testSubscriber(person: BotSubscriber) {
+  error.value = ''
+  notice.value = ''
+  try {
+    const result = await api.post<{ detail: string }>(
+      `/api/settings/schedule/subscribers/${person.id}/test`,
+    )
+    notice.value = result.detail
+    await loadSubscribers()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось отправить'
+  }
+}
+
+async function removeSubscriber(person: BotSubscriber) {
+  const who = person.username ? `@${person.username}` : person.chat_id
+  if (!confirm(`Убрать ${who} из списка? Он вернётся, если снова напишет боту.`)) return
+  try {
+    await api.delete(`/api/settings/schedule/subscribers/${person.id}`)
+    await loadSubscribers()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось убрать'
+  }
+}
+
 async function removeChannel(channel: TelegramChannel) {
   if (!confirm(`Убрать ${channel.chat} из списка каналов?`)) return
   error.value = ''
@@ -116,7 +157,9 @@ async function removeChannel(channel: TelegramChannel) {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await Promise.all([load(), loadSubscribers()])
+})
 </script>
 
 <template>
@@ -278,6 +321,91 @@ onMounted(load)
                     data-tip="Убрать из списка"
                     aria-label="Убрать канал из списка"
                     @click="removeChannel(channel)"
+                  >
+                    <NavIcon name="trash" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Подписчики оповещений -->
+    <section class="ws-surface" style="margin-bottom: 16px; max-width: 860px">
+      <div class="ws-surface-head">
+        <h2 class="ws-surface-title">Кому бот сообщает о новостях</h2>
+        <span class="muted" style="font-size: 12px">
+          подписано: {{ subscribers.filter((s) => s.notify && !s.is_blocked).length }}
+        </span>
+      </div>
+
+      <div class="ws-surface-body stack">
+        <!-- Вебхук занимает единственный канал получения обновлений: пока он
+             включён, бот не увидит ни «/start», ни нажатий на кнопки меню -->
+        <p v-if="info?.webhook_url" class="alert alert-error" style="margin: 0">
+          У бота включён вебхук на <b>{{ info.webhook_url }}</b>. Пока он стоит, Telegram
+          не отдаёт нам сообщения людей, и подписаться через меню бота нельзя —
+          отправлять сообщения это не мешает. Вебхук и наш опрос одновременно
+          работать не могут: нужно либо снять вебхук, либо завести для портала
+          отдельного бота.
+        </p>
+        <p v-else class="alert alert-info" style="margin: 0">
+          Человек подписывается сам: пишет боту
+          <b v-if="info?.bot_username">@{{ info.bot_username }}</b> команду «/start»
+          и включает оповещения кнопкой. После каждого сбора бот присылает подписчикам
+          сводку — сколько новостей пришло и из каких источников, сколько готово
+          к публикации и сколько ещё не просмотрено.
+        </p>
+      </div>
+
+      <div v-if="!subscribers.length" class="empty-state">
+        Пока никто не подписан.
+      </div>
+
+      <div v-else class="table-wrap">
+        <table class="ws-table">
+          <thead>
+            <tr>
+              <th>Кто</th>
+              <th>Оповещения</th>
+              <th>Последняя сводка</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="person in subscribers" :key="person.id">
+              <td>
+                {{ person.full_name || '—' }}
+                <div v-if="person.username" class="muted" style="font-size: 11px">
+                  @{{ person.username }}
+                </div>
+              </td>
+              <td>
+                <span
+                  class="ws-badge"
+                  :class="person.is_blocked ? 'critical' : person.notify ? 'healthy' : 'neutral'"
+                >
+                  {{ person.is_blocked ? 'Заблокировал бота' : person.notify ? 'Включены' : 'Выключены' }}
+                </span>
+              </td>
+              <td>{{ formatDate(person.last_notified_at) }}</td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    class="icon-btn"
+                    data-tip="Отправить сводку сейчас"
+                    aria-label="Отправить сводку сейчас"
+                    @click="testSubscriber(person)"
+                  >
+                    <NavIcon name="bell" />
+                  </button>
+                  <button
+                    class="icon-btn is-danger"
+                    data-tip="Убрать из списка"
+                    aria-label="Убрать подписчика из списка"
+                    @click="removeSubscriber(person)"
                   >
                     <NavIcon name="trash" />
                   </button>
