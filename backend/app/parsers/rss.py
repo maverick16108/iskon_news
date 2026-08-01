@@ -82,7 +82,10 @@ async def _posts_from_feed(source: Source) -> list[FoundPost]:
 
 
 async def _posts_from_archive(source: Source) -> list[FoundPost]:
-    found = await collect_posts(source.url, months_back=2, limit=60)
+    # Полгода вглубь, а не два месяца: за один заход всё равно обрабатывается
+    # не больше limit новых, поэтому архив добирается постепенно, от обхода
+    # к обходу, не заваливая сайт запросами.
+    found = await collect_posts(source.url, months_back=6, limit=400)
     return [
         FoundPost(url=post.url, title=post.title, published_at=post.published_at)
         for post in found
@@ -90,14 +93,14 @@ async def _posts_from_archive(source: Source) -> list[FoundPost]:
 
 
 async def _posts_from_newsletter(source: Source) -> list[FoundPost]:
-    found = await collect_newsletter(source.url, issues_back=4, limit=120)
+    found = await collect_newsletter(source.url, issues_back=12, limit=400)
     return [
         FoundPost(url=post.url, title=post.title, published_at=post.published_at)
         for post in found
     ]
 
 
-async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) -> dict:
+async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 40) -> dict:
     """Читает источник и добавляет новые статьи.
 
     Возвращает сводку: сколько публикаций найдено, сколько добавлено,
