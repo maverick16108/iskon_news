@@ -149,6 +149,7 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Кнопка без рамки и фона — только иконка */
 .sidebar-toggle {
   flex: none;
   display: grid;
@@ -156,16 +157,65 @@ body {
   width: 26px;
   height: 26px;
   margin-left: auto;
-  border: 1px solid var(--scheme-border, #dce3eb);
-  border-radius: 7px;
-  background: var(--scheme-surface, #fff);
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--scheme-text-muted, #7b899b);
   cursor: pointer;
 }
 
 .sidebar-toggle:hover {
-  color: var(--scheme-text, #18304e);
-  border-color: var(--scheme-border-strong, #c7d1dd);
+  color: var(--scheme-accent, #1768ff);
+}
+
+.sidebar-toggle:focus-visible {
+  outline: 2px solid var(--scheme-accent, #1768ff);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Ширина панели задаётся переменной и тянется рукояткой */
+.ui-shell .ui-sidebar {
+  width: var(--sidebar-width, 232px);
+  min-width: var(--sidebar-width, 232px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Внутри zoom единица vh считается от полной высоты окна в CSS-пикселях,
+     а потом результат ещё умножается на масштаб — панель вылезала за экран
+     и уносила с собой блок профиля. Поэтому делим на масштаб явно. */
+  max-height: calc(100vh / var(--ui-scale, 1));
+}
+
+/* Пункты меню прокручиваются, профиль остаётся внизу: при крупном
+   масштабе список раньше выдавливал профиль за край экрана. */
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible,
+.ui-shell.is-resizing .sidebar-resizer {
+  background: var(--scheme-accent, #1768ff);
+  opacity: 0.55;
+  outline: none;
+}
+
+.ui-shell.is-resizing {
+  cursor: col-resize;
 }
 
 /* Свёрнутое меню: остаются только иконки */
@@ -173,6 +223,8 @@ body {
   width: 66px;
   min-width: 66px;
 }
+
+/* Ширина колонки грида задаётся из скрипта через --ui-sidebar */
 
 .ui-shell.is-collapsed .ui-brand-copy,
 .ui-shell.is-collapsed .ui-nav-label,
@@ -572,9 +624,22 @@ body {
   cursor: pointer;
 }
 
+/* Выбранный тег заливаем акцентом вместо второй обводки:
+   рамка поверх рамки в тёмной теме выглядела перегруженно. */
+.tag-picker .ws-chip {
+  border-color: transparent;
+  background: var(--scheme-surface-hover, #eef2f7);
+  color: var(--scheme-text-secondary, #35414f);
+}
+
+.tag-picker .ws-chip:hover {
+  border-color: var(--scheme-border, #dce3eb);
+}
+
 .tag-picker .ws-chip.is-active {
-  outline: 2px solid var(--scheme-accent, #1768ff);
-  outline-offset: 1px;
+  background: var(--scheme-accent, #1768ff);
+  border-color: var(--scheme-accent, #1768ff);
+  color: #fff;
 }
 
 .post-preview {
