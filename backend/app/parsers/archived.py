@@ -67,18 +67,62 @@ def _build(year: int, month: int, day: int) -> date | None:
         return None
 
 
-def content_date(text: str) -> date | None:
-    """Дата самого материала, если она указана в тексте."""
+# Слова, после которых дата — это дата самого материала: так подписывают
+# записи лекций и письма.
+OWN_DATE_MARKERS = re.compile(
+    r"(lecture|class|talk|letter|recorded|delivered|spoken|given|"
+    r"лекция|запись|письмо|прочитан)\w*[^.]{0,60}$",
+    re.I,
+)
+
+# Слова, после которых дата заведомо чужая: рождение, смерть, основание.
+# Проверяются раньше остальных признаков — «born on August 31, 1945»
+# в некрологе не делает сам некролог материалом сорок пятого года.
+ALIEN_DATE_MARKERS = re.compile(
+    r"(born|died|passed away|founded|established|inaugurated|launched|"
+    r"since|until|starting|beginning|родил|скончал|основан|учрежд)\w*[^.]{0,40}$",
+    re.I,
+)
+
+# Публикации вида «2023.06.27 – Название» начинаются прямо с даты
+HEAD_DATE_CHARS = 12
+
+
+def _is_own_date(text: str, start: int) -> bool:
+    """Дата материала или просто дата, упомянутая в тексте.
+
+    Различить необходимо: в некрологе «born on August 31, 1945» и в новости
+    «following the inauguration on February 4, 2026» даты к возрасту самого
+    материала отношения не имеют, а «Lecture given on Nov. 26, 1966» — имеет.
+    """
+    before = text[:start]
+
+    if ALIEN_DATE_MARKERS.search(before):
+        return False
+    if start <= HEAD_DATE_CHARS:
+        return True
+    return bool(OWN_DATE_MARKERS.search(before))
+
+
+def content_date(text: str, *, require_marker: bool = False) -> date | None:
+    """Дата самого материала, если она указана в тексте.
+
+    В заголовке дате верим как есть, в тексте — только если она подписывает
+    сам материал, а не упомянута по ходу изложения.
+    """
     if not text:
         return None
 
     # Смотрим только начало: дальше по тексту попадаются даты событий,
     # цитат и ссылок, которые к дате материала отношения не имеют
-    head = text[:200]
+    head = text[:300]
 
     for pattern, order in _PATTERNS:
         match = pattern.search(head)
         if not match:
+            continue
+
+        if require_marker and not _is_own_date(head, match.start()):
             continue
 
         if order == "dMy":
@@ -116,7 +160,9 @@ def content_date(text: str) -> date | None:
 
 def looks_archived(title: str, text: str, published_at: datetime | None) -> tuple[bool, date | None]:
     """Архивный ли материал и какая у него собственная дата."""
-    found = content_date(title) or content_date(text)
+    # В заголовке дата почти всегда относится к самому материалу
+    # («CC Reading – 7-31-26»), в тексте — далеко не всегда
+    found = content_date(title) or content_date(text, require_marker=True)
     if found is None:
         return False, None
 
