@@ -223,8 +223,19 @@ async def slow_sync(months: int, issues: int, delay: float, limit: int) -> int:
     from app.parsers.ingest import FoundPost, ingest
     from app.parsers.newsletter import collect_posts as collect_newsletter
     from app.parsers.rss import _posts_from_feed
+    from app.worker import LOCK_FETCH, _try_lock
 
     async with SessionFactory() as db:
+        # Берём ту же блокировку, что и планировщик: иначе два обхода идут
+        # одновременно, натыкаются на один адрес и мешают друг другу.
+        if not await _try_lock(db, LOCK_FETCH):
+            print(
+                "Сейчас идёт плановый обход источников. "
+                "Подождите его окончания и запустите снова.",
+                file=sys.stderr,
+            )
+            return 1
+
         sources = list(await db.scalars(select(Source).where(Source.is_active.is_(True))))
 
         for source in sources:

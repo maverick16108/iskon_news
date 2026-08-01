@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -244,8 +245,26 @@ async def ingest(
         if not article.image_url and article.images:
             article.image_url = article.images[0].url
 
-        session.add(article)
-        await session.flush()
+        # Вставку заворачиваем в точку сохранения: обход мог идти
+        # одновременно с плановым (например, ручная догрузка архива рядом
+        # с часовым планировщиком), и тот же адрес мог появиться уже после
+        # нашей проверки. Без этого первое же столкновение ломало сессию
+        # и валило весь остаток пачки.
+        try:
+            async with session.begin_nested():
+                session.add(article)
+                await session.flush()
+        except IntegrityError:
+            log.info("%s завели параллельно — пропускаем", post.url)
+            existing_id = await session.scalar(
+                select(Article.id).where(Article.url == post.url)
+            )
+            if existing_id and await _remember_mention(
+                session, existing_id, source.id, post.url
+            ):
+                result.repeats += 1
+            continue
+
         await _remember_mention(session, article.id, source.id, post.url)
         result.added += 1
         result.images += len(images)
