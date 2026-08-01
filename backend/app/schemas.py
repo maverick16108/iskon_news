@@ -190,11 +190,6 @@ class PromptUpdate(BaseModel):
     is_default: bool | None = None
 
 
-class PromptPreview(BaseModel):
-    rendered: str
-    chars: int
-
-
 class PlaceholderInfo(BaseModel):
     token: str
     description: str

@@ -4,14 +4,13 @@ from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.ai.prompt import DEFAULT_TEMPLATE, PLACEHOLDERS, render_system_prompt
+from app.ai.prompt import DEFAULT_TEMPLATE, PLACEHOLDERS
 from app.deps import CurrentUser, DbDep, SuperAdmin, write_audit
 from app.models import PromptTemplate, Source
 from app.schemas import (
     Message,
     PromptOut,
     PromptCreate,
-    PromptPreview,
     PromptUpdate,
     PlaceholderInfo,
 )
@@ -169,13 +168,6 @@ async def delete_prompt(prompt_id: int, request: Request, db: DbDep, admin: Supe
     )
     await db.commit()
     return Message(detail=f"Шаблон «{name}» удалён")
-
-
-@router.post("/preview", response_model=PromptPreview)
-async def preview_prompt(payload: PromptCreate, user: CurrentUser):
-    """Показывает промпт целиком — с подставленными списками и блоком формата."""
-    rendered = render_system_prompt(payload.body)
-    return PromptPreview(rendered=rendered, chars=len(rendered))
 
 
 async def _clear_other_defaults(db: DbDep, keep_id: int) -> None:

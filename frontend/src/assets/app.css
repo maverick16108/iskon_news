@@ -1070,7 +1070,7 @@ textarea.ws-input {
 /* --- Промпты ------------------------------------------------------------- */
 
 .prompt-body {
-  min-height: 320px;
+  min-height: 520px;
   font-family: var(--mono, ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.5;

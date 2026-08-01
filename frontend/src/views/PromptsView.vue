@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { api, type PlaceholderInfo, type PromptPreview, type PromptTemplate } from '@/api'
+import { api, type PlaceholderInfo, type PromptTemplate } from '@/api'
 import { formatDate } from '@/labels'
 
 const prompts = ref<PromptTemplate[]>([])
 const placeholders = ref<PlaceholderInfo[]>([])
 const loading = ref(true)
 const saving = ref(false)
-const previewing = ref(false)
 const error = ref('')
 const notice = ref('')
-const preview = ref<PromptPreview | null>(null)
 
 const editing = ref<PromptTemplate | null>(null)
 const creating = ref(false)
@@ -43,7 +41,6 @@ function startCreate() {
   })
   editing.value = null
   creating.value = true
-  preview.value = null
 }
 
 function startEdit(prompt: PromptTemplate) {
@@ -55,13 +52,11 @@ function startEdit(prompt: PromptTemplate) {
   })
   creating.value = false
   editing.value = prompt
-  preview.value = null
 }
 
 function close() {
   creating.value = false
   editing.value = null
-  preview.value = null
 }
 
 function insertPlaceholder(token: string) {
@@ -78,23 +73,6 @@ function insertPlaceholder(token: string) {
     field.focus()
     field.setSelectionRange(start + token.length, start + token.length)
   })
-}
-
-async function showPreview() {
-  previewing.value = true
-  error.value = ''
-  try {
-    preview.value = await api.post<PromptPreview>('/api/prompts/preview', {
-      name: form.name || 'предпросмотр',
-      description: null,
-      body: form.body,
-      is_default: false,
-    })
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось собрать предпросмотр'
-  } finally {
-    previewing.value = false
-  }
 }
 
 async function save() {
@@ -234,24 +212,9 @@ onMounted(async () => {
           <button class="ws-btn ws-btn-primary" type="submit" :disabled="saving">
             {{ saving ? 'Сохраняем…' : 'Сохранить' }}
           </button>
-          <button
-            class="ws-btn"
-            type="button"
-            :disabled="previewing || form.body.length < 20"
-            @click="showPreview"
-          >
-            {{ previewing ? 'Собираем…' : 'Показать целиком' }}
-          </button>
           <button class="ws-btn ws-btn-quiet" type="button" @click="close">Отмена</button>
         </div>
 
-        <div v-if="preview" class="ws-field">
-          <label class="ws-field-label">
-            Промпт целиком
-            <span class="muted">— {{ preview.chars }} символов</span>
-          </label>
-          <div class="prompt-preview">{{ preview.rendered }}</div>
-        </div>
       </form>
     </section>
 
