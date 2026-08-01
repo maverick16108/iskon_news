@@ -401,7 +401,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
+  <div class="editor-view">
     <div v-if="loading" class="editor-grid" aria-busy="true">
       <section class="ws-surface">
         <div class="ws-surface-head"><h2 class="ws-surface-title">Исходная статья</h2></div>
@@ -429,6 +429,16 @@ onMounted(async () => {
         <RouterLink class="ws-btn ws-btn-quiet" :to="{ name: 'articles' }">← К ленте</RouterLink>
         <a class="ws-btn ws-btn-quiet" :href="article.url" target="_blank" rel="noopener">
           Открыть оригинал
+        </a>
+        <a
+          v-if="post?.telegram_url"
+          class="ws-btn ws-btn-quiet"
+          :href="post.telegram_url"
+          target="_blank"
+          rel="noopener"
+          title="Пост, как он вышел в канале"
+        >
+          Открыть в канале
         </a>
 
         <span class="row-end row">

@@ -682,12 +682,52 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  /* В две колонки карточки тянутся до общей высоты: обрывать оригинал
+     на середине рядом с длинным постом некрасиво, а пустота под ним —
+     тем более. Текст статьи прокручивается внутри своей карточки. */
+  align-items: stretch;
 }
 
-@media (max-width: 1100px) {
+.editor-grid > .ws-surface {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.editor-grid > .ws-surface > .ws-surface-head {
+  flex: none;
+}
+
+/* Высоту строки задаёт пост: его правят, и внутренняя полоса прокрутки в нём
+   мешала бы. Оригинал дотягивается до этой же высоты, а текст прокручивается
+   внутри — но только если не поместился.
+   flex-basis: 0 с min-height: 0 убирает текст статьи из расчёта высоты, иначе
+   длинный оригинал растянул бы строку и прокручивать было бы нечего. */
+.editor-grid > .ws-surface:first-child > .ws-surface-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Считаем по месту, которое реально досталось колонкам, а не по ширине окна.
+   Окно тут плохой ориентир: слева боковая панель, которую можно растянуть,
+   а весь интерфейс масштабируется через zoom — при увеличении в широком
+   окне колонкам оставалось меньше места, чем показывала медиазапрос,
+   и они сплющивались вместо того, чтобы встать друг под друга. */
+.editor-view {
+  container-type: inline-size;
+}
+
+@container (max-width: 1000px) {
   .editor-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Друг под другом равнять не с чем: оригинал разворачивается целиком,
+     страница прокручивается как обычно. */
+  .editor-grid > .ws-surface:first-child > .ws-surface-body {
+    flex: 0 1 auto;
+    overflow-y: visible;
   }
 }
 
