@@ -1111,6 +1111,21 @@ textarea.ws-input {
   padding-left: 18px;
 }
 
+/* Архивная запись: серая, нейтральная — это не проблема, а просто
+   переиздание старого материала */
+.archive-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  background: var(--scheme-surface-hover, #eef2f7);
+  border: 1px solid var(--scheme-border, #dce3eb);
+  color: var(--scheme-text-muted, #7b899b);
+  white-space: nowrap;
+}
+
+.archive-toggle {
+  flex-wrap: nowrap;
+}
+
 /* Повтор — не ошибка и не тревога, поэтому спокойный янтарный,
    а не красный: новость просто пришла из нескольких источников. */
 .repeat-badge {

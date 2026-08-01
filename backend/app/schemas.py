@@ -157,6 +157,8 @@ class ArticleOut(ORMModel):
     image_url: str | None
     categories: list[str] | None
     fetched_at: datetime
+    is_archive: bool = False       # переиздание старой записи
+    content_date: datetime | None = None
 
 
 class RepeatEntry(BaseModel):

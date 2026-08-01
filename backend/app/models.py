@@ -149,6 +149,12 @@ class Article(Base):
     image_url: Mapped[str | None] = mapped_column(String(1024))
     categories: Mapped[list[str] | None] = mapped_column(JSONB)
 
+    # Переиздание старого материала: сайт выложил его сегодня, но сама
+    # запись двух-трёхлетней давности. В ленте по умолчанию прячем.
+    is_archive: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # Дата, указанная в самом материале, если она там есть
+    content_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     post: Mapped[Post | None] = relationship(

@@ -116,6 +116,10 @@ export interface Article {
   image_url: string | null
   categories: string[] | null
   fetched_at: string
+  /** Переиздание старой записи: сайт выложил её сегодня, материал давний */
+  is_archive: boolean
+  /** Дата, указанная в самом материале */
+  content_date: string | null
 }
 
 /** Ролик из новости. */
@@ -196,6 +200,8 @@ export interface FetchResult {
   with_full_text: number
   images: number
   videos: number
+  /** Переиздания старых записей */
+  archived: number
   /** Уже были в ленте от другого источника */
   repeats: number
 }

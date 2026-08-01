@@ -34,6 +34,8 @@ const search = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
 const sourceFilter = ref<number | ''>('')
 const statusFilter = ref<PostStatus | '' | 'none'>('')
+// Переиздания старых записей по умолчанию не показываем
+const includeArchive = ref(false)
 
 const sentinel = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
@@ -70,6 +72,7 @@ function buildParams(offset: number) {
     sort: sortKey.value,
     order: sortAsc.value ? 'asc' : 'desc',
   })
+  if (includeArchive.value) params.set('include_archive', 'true')
   if (search.value.trim()) params.set('search', search.value.trim())
   if (sourceFilter.value !== '') params.set('source_id', String(sourceFilter.value))
   if (statusFilter.value === 'none') params.set('only_unprocessed', 'true')
@@ -166,6 +169,8 @@ async function fetchAll() {
           .map((r) => `${r.source} — ${r.added}`)
           .join(', ')
       : 'Новых публикаций в источниках нет'
+    const archived = results.reduce((sum, r) => sum + r.archived, 0)
+    if (archived) notice.value += `. Из них переизданий старых записей: ${archived} — скрыты из ленты`
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Сбор не удался'
@@ -235,7 +240,7 @@ watch(search, () => {
   clearTimeout(debounce)
   debounce = setTimeout(load, 350)
 })
-watch([sourceFilter, statusFilter], load)
+watch([sourceFilter, statusFilter, includeArchive], load)
 </script>
 
 <template>
@@ -250,6 +255,20 @@ watch([sourceFilter, statusFilter], load)
 
       <UiSelect v-model="sourceFilter" :options="sourceOptions" small auto />
       <UiSelect v-model="statusFilter" :options="statusOptions" small auto />
+
+      <label class="row archive-toggle" style="gap: 7px; cursor: pointer">
+        <span class="ui-check" :class="{ 'is-on': includeArchive }">
+          <input v-model="includeArchive" type="checkbox" />
+          <NavIcon name="tick" />
+        </span>
+        <span
+          class="muted"
+          style="font-size: 13px"
+          title="Записи старых лекций, которые сайт выложил заново"
+        >
+          Показывать архивные
+        </span>
+      </label>
 
       <span class="row-end row">
         <span class="muted" style="font-size: 13px">
@@ -333,6 +352,13 @@ watch([sourceFilter, statusFilter], load)
                 >
                   <NavIcon name="photo" class="photo-count-icon" />
                   {{ article.image_count }}
+                </span>
+                <span
+                  v-if="article.is_archive"
+                  class="ws-badge archive-badge"
+                  :title="`Материал от ${formatDateShort(article.content_date)} — сайт выложил его заново`"
+                >
+                  архив{{ article.content_date ? ` · ${formatDateShort(article.content_date)}` : '' }}
                 </span>
                 <span
                   v-if="article.repeat_sources.length"

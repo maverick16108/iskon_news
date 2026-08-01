@@ -123,6 +123,7 @@ async def list_articles(
     source_id: int | None = None,
     status_filter: PostStatus | None = Query(default=None, alias="status"),
     only_unprocessed: bool = False,
+    include_archive: bool = False,
     search: str | None = None,
     sort: str = Query(default="published"),
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
@@ -146,6 +147,11 @@ async def list_articles(
             selectinload(Article.videos),
         )
     )
+
+    # Переиздания старых записей в ленте не нужны: сайт выложил их сегодня,
+    # но материал давний. Показываем только по отдельной просьбе.
+    if not include_archive:
+        query = query.where(Article.is_archive.is_(False))
 
     if source_id is not None:
         query = query.where(Article.source_id == source_id)

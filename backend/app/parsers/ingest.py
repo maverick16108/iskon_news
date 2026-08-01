@@ -25,6 +25,7 @@ from app.models import (
     Source,
     title_key_for,
 )
+from app.parsers.archived import looks_archived
 from app.parsers.fetch import FetchError, extract_text, fetch_html
 from app.parsers.images import extract_images
 from app.parsers.videos import extract_videos
@@ -61,6 +62,7 @@ class IngestResult:
     with_full_text: int = 0
     images: int = 0
     videos: int = 0
+    archived: int = 0        # переиздания старых записей
     repeats: int = 0            # уже были в ленте от другого источника
     skipped_boilerplate: int = 0
     _seen_texts: set[str] = field(default_factory=set, repr=False)
@@ -73,6 +75,7 @@ class IngestResult:
             "with_full_text": self.with_full_text,
             "images": self.images,
             "videos": self.videos,
+            "archived": self.archived,
             "repeats": self.repeats,
         }
 
@@ -143,8 +146,22 @@ async def ingest(
             content = None
             quality = ContentQuality.empty
 
+        # Сайт мог выложить сегодня запись трёхлетней давности: дата страницы
+        # свежая, а материал старый. Ловим по дате внутри заголовка и текста.
+        archived, own_date = looks_archived(
+            post.title, content or post.summary or "", post.published_at
+        )
+        if archived:
+            result.archived += 1
+
         article = Article(
             source_id=source.id,
+            is_archive=archived,
+            content_date=(
+                datetime.combine(own_date, datetime.min.time(), tzinfo=timezone.utc)
+                if own_date
+                else None
+            ),
             url=post.url,
             title=post.title.strip(),
             title_key=title_key_for(post.title),
