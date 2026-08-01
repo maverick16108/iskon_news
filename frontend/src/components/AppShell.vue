@@ -193,15 +193,6 @@ onBeforeUnmount(() => {
             </RouterLink>
             <RouterLink
               class="ui-nav-link"
-              :to="{ name: 'users' }"
-              data-tip="Пользователи"
-              @click="navOpen = false"
-            >
-              <NavIcon name="users" />
-              <span>Пользователи</span>
-            </RouterLink>
-            <RouterLink
-              class="ui-nav-link"
               :to="{ name: 'prompts' }"
               data-tip="Промпты"
               @click="navOpen = false"
@@ -235,6 +226,15 @@ onBeforeUnmount(() => {
             >
               <NavIcon name="audit" />
               <span>Журнал действий</span>
+            </RouterLink>
+            <RouterLink
+              class="ui-nav-link"
+              :to="{ name: 'users' }"
+              data-tip="Пользователи"
+              @click="navOpen = false"
+            >
+              <NavIcon name="users" />
+              <span>Пользователи</span>
             </RouterLink>
           </nav>
         </section>
