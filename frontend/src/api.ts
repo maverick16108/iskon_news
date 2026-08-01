@@ -136,6 +136,15 @@ export interface ArticleListItem extends Article {
   post_status: PostStatus | null
   post_char_count: number | null
   image_count: number
+  is_viewed: boolean
+  viewed_at: string | null
+}
+
+/** Уйдёт ли пост в канал при публикации. Видно любому вошедшему. */
+export interface TelegramState {
+  is_enabled: boolean
+  ready: string[]     // каналы, готовые принять пост
+  blocked: string[]   // отмечены, но бот там публиковать не может
 }
 
 export interface ArticleDetail extends Article {

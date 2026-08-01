@@ -2,8 +2,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { MAX_POST_CHARS, api, type ArticleDetail, type ArticleImage, type Post } from '@/api'
+import {
+  MAX_POST_CHARS,
+  api,
+  type ArticleDetail,
+  type ArticleImage,
+  type Post,
+  type TelegramState,
+} from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
+import ToastStack from '@/components/ToastStack.vue'
 import { POST_STATUS_LABELS, POST_STATUS_TONE, QUALITY_LABELS, QUALITY_TONE, formatDate } from '@/labels'
 
 const route = useRoute()
@@ -11,6 +19,7 @@ const articleId = Number(route.params.id)
 
 const article = ref<ArticleDetail | null>(null)
 const allowedTags = ref<string[]>([])
+const telegramState = ref<TelegramState | null>(null)
 const loading = ref(true)
 const generating = ref(false)
 const saving = ref(false)
@@ -107,6 +116,32 @@ async function save() {
   }
 }
 
+/** Куда уйдёт пост — подтягиваем, чтобы предупредить до нажатия кнопки. */
+async function loadTelegramState() {
+  try {
+    telegramState.value = await api.get<TelegramState>('/api/settings/telegram/state')
+  } catch {
+    // не критично: публиковать это не мешает
+  }
+}
+
+const publishHint = computed(() => {
+  const state = telegramState.value
+  if (!state || post.value?.status === 'published') return ''
+
+  if (!state.is_enabled) {
+    return 'Вещание выключено: пост получит статус «опубликован», но в канал не уйдёт. Включается в разделе «Публикация в канал».'
+  }
+  if (!state.ready.length) {
+    return 'Вещание включено, но ни один канал не готов принять пост — проверьте права бота в разделе «Публикация в канал».'
+  }
+
+  const where = `Уйдёт в ${state.ready.join(', ')}.`
+  return state.blocked.length
+    ? `${where} Не сможет опубликовать в ${state.blocked.join(', ')} — отправка прервётся на этом канале.`
+    : where
+})
+
 async function publish() {
   saving.value = true
   error.value = ''
@@ -116,7 +151,14 @@ async function publish() {
     await api.patch<Post>(`/api/articles/${articleId}/post`, draft.value)
     const result = await api.post<Post>(`/api/articles/${articleId}/publish`)
     if (article.value) article.value.post = result
-    notice.value = 'Пост опубликован'
+
+    // Разделяем два разных исхода: пост мог просто получить статус в базе,
+    // а мог реально уйти подписчикам. Раньше сообщение было одно на оба,
+    // и выключенное вещание выглядело как пропажа поста.
+    notice.value = result.telegram_url
+      ? 'Опубликован в канале'
+      : 'Пост отмечен опубликованным, но в канал не отправлялся: вещание выключено в разделе «Публикация в канал»'
+    await loadTelegramState()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Не удалось опубликовать'
   } finally {
@@ -304,7 +346,7 @@ onMounted(async () => {
   } catch {
     // без подсказок теги можно ввести вручную
   }
-  await load()
+  await Promise.all([load(), loadTelegramState()])
 })
 </script>
 
@@ -357,8 +399,12 @@ onMounted(async () => {
         </span>
       </div>
 
-      <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
-      <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
+      <ToastStack
+        :error="error"
+        :notice="notice"
+        @clear-error="error = ''"
+        @clear-notice="notice = ''"
+      />
       <p
         v-if="article.content_quality === 'excerpt'"
         class="alert alert-info"
@@ -588,6 +634,16 @@ onMounted(async () => {
                 </button>
               </span>
             </div>
+
+            <!-- Что именно сделает кнопка — видно до нажатия, а не после -->
+            <p v-if="publishHint" class="publish-hint muted">{{ publishHint }}</p>
+
+            <p v-if="post?.telegram_url" class="publish-hint">
+              Пост в канале:
+              <a :href="post.telegram_url" target="_blank" rel="noopener">
+                {{ post.telegram_url }}
+              </a>
+            </p>
 
             <p v-if="post?.ai_error" class="alert alert-error">{{ post.ai_error }}</p>
           </div>

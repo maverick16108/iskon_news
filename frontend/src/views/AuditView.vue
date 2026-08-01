@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import { api, type AuditEntry } from '@/api'
 import TableSkeleton from '@/components/TableSkeleton.vue'
+import ToastStack from '@/components/ToastStack.vue'
 import { AUDIT_ACTION_LABELS, formatDate } from '@/labels'
 
 const entries = ref<AuditEntry[]>([])
@@ -86,7 +87,7 @@ onMounted(load)
 
 <template>
   <div>
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
+    <ToastStack :error="error" @clear-error="error = ''" />
 
     <section class="ws-surface">
       <div class="ws-surface-head">

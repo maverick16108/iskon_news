@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { api, type ArticleListItem, type FetchResult, type PostStatus, type Source } from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
 import TableSkeleton from '@/components/TableSkeleton.vue'
+import ToastStack from '@/components/ToastStack.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
 import {
@@ -11,10 +13,13 @@ import {
   POST_STATUS_TONE,
   QUALITY_LABELS,
   QUALITY_TONE,
+  formatDate,
   formatDateShort,
 } from '@/labels'
 
 const PAGE_SIZE = 50
+
+const router = useRouter()
 
 const articles = ref<ArticleListItem[]>([])
 const sources = ref<Source[]>([])
@@ -106,6 +111,29 @@ async function loadMore() {
   } finally {
     loadingMore.value = false
   }
+}
+
+/** Клик по любому месту строки открывает новость. */
+function openArticle(article: ArticleListItem, event: MouseEvent | KeyboardEvent) {
+  // По ссылке-заголовку и по любому другому элементу управления внутри строки
+  // отрабатывает он сам — иначе получилось бы два перехода разом
+  const target = event.target as HTMLElement | null
+  if (target?.closest('a, button, input, select, textarea')) return
+
+  const mouse = event as MouseEvent
+  if (mouse.button === 2) return // правая кнопка — контекстное меню
+
+  const route = router.resolve({ name: 'article', params: { id: article.id } })
+
+  // Средняя кнопка и Ctrl/Cmd открывают в новой вкладке — как у обычной ссылки
+  if (mouse.button === 1 || mouse.metaKey || mouse.ctrlKey) {
+    window.open(route.href, '_blank', 'noopener')
+    return
+  }
+
+  // Красим строку сразу: сервер отметит просмотр, но ленту мы уже покидаем
+  article.is_viewed = true
+  router.push(route)
 }
 
 function toggleSort(key: SortKey) {
@@ -233,8 +261,12 @@ watch([sourceFilter, statusFilter], load)
       </span>
     </div>
 
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
-    <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
+    <ToastStack
+      :error="error"
+      :notice="notice"
+      @clear-error="error = ''"
+      @clear-notice="notice = ''"
+    />
 
     <section class="ws-surface">
       <div class="ws-surface-head">
@@ -271,8 +303,21 @@ watch([sourceFilter, statusFilter], load)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="article in articles" :key="article.id">
-              <td>{{ formatDateShort(article.published_at) }}</td>
+            <tr
+              v-for="article in articles"
+              :key="article.id"
+              class="row-link"
+              :class="{ 'is-unread': !article.is_viewed }"
+              :title="article.is_viewed ? `Просмотрено: ${formatDate(article.viewed_at)}` : 'Ещё не просматривали'"
+              tabindex="0"
+              @click="openArticle(article, $event)"
+              @auxclick="openArticle(article, $event)"
+              @keydown.enter="openArticle(article, $event)"
+            >
+              <td>
+                <span class="unread-dot" aria-hidden="true" />
+                {{ formatDateShort(article.published_at) }}
+              </td>
               <td class="muted">{{ formatDateShort(article.fetched_at) }}</td>
               <td class="wrap">
                 <RouterLink

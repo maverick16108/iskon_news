@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
 from app.ai.client import AIError, refine, rewrite, translate_captions
@@ -13,6 +14,7 @@ from app.deps import CurrentUser, DbDep, write_audit
 from app.models import (
     Article,
     ArticleImage,
+    ArticleView,
     ContentQuality,
     Post,
     PostStatus,
@@ -65,9 +67,17 @@ async def list_articles(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    # Отметка «просмотрено» своя у каждого редактора, поэтому подтягиваем
+    # её отдельным LEFT JOIN по текущему пользователю, а не полем статьи.
+    seen = ArticleView.__table__.alias("seen")
+
     query = (
-        select(Article, Source.name)
+        select(Article, Source.name, seen.c.viewed_at)
         .join(Source, Source.id == Article.source_id)
+        .outerjoin(
+            seen,
+            (seen.c.article_id == Article.id) & (seen.c.user_id == user.id),
+        )
         .options(selectinload(Article.post), selectinload(Article.images))
     )
 
@@ -105,8 +115,10 @@ async def list_articles(
             post_status=article.post.status if article.post else None,
             post_char_count=article.post.char_count if article.post else None,
             image_count=len(article.images),
+            is_viewed=viewed_at is not None,
+            viewed_at=viewed_at,
         )
-        for article, source_name in rows
+        for article, source_name, viewed_at in rows
     ]
 
 
@@ -119,6 +131,17 @@ async def get_article(article_id: int, db: DbDep, user: CurrentUser):
     )
     if article is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Статья не найдена")
+
+    # Открыл — значит просмотрел. ON CONFLICT, потому что открыть статью
+    # в двух вкладках разом ничего ломать не должно.
+    await db.execute(
+        pg_insert(ArticleView)
+        .values(article_id=article.id, user_id=user.id)
+        .on_conflict_do_update(
+            constraint="uq_article_view", set_={"viewed_at": func.now()}
+        )
+    )
+    await db.commit()
     return article
 
 

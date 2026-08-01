@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 
 import { api, type Role, type User } from '@/api'
 import TableSkeleton from '@/components/TableSkeleton.vue'
+import ToastStack from '@/components/ToastStack.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
 import { ROLE_LABELS, formatDate } from '@/labels'
@@ -180,8 +181,12 @@ onMounted(load)
       </span>
     </div>
 
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
-    <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
+    <ToastStack
+      :error="error"
+      :notice="notice"
+      @clear-error="error = ''"
+      @clear-notice="notice = ''"
+    />
 
     <section v-if="showForm" class="ws-surface" style="margin-bottom: 16px">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Новый пользователь</h2></div>

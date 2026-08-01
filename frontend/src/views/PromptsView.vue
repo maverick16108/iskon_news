@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 
 import { api, type PromptTemplate } from '@/api'
+import ToastStack from '@/components/ToastStack.vue'
 import { formatDate } from '@/labels'
 
 const prompts = ref<PromptTemplate[]>([])
@@ -57,8 +58,12 @@ onMounted(load)
       </span>
     </div>
 
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
-    <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
+    <ToastStack
+      :error="error"
+      :notice="notice"
+      @clear-error="error = ''"
+      @clear-notice="notice = ''"
+    />
 
     <section class="ws-surface">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Шаблоны промптов</h2></div>

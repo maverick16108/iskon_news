@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import { api, type LlmSettings, type LlmTestResult } from '@/api'
+import ToastStack from '@/components/ToastStack.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
 import { formatDate } from '@/labels'
@@ -113,8 +114,12 @@ onMounted(load)
 
 <template>
   <div>
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
-    <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
+    <ToastStack
+      :error="error"
+      :notice="notice"
+      @clear-error="error = ''"
+      @clear-notice="notice = ''"
+    />
     <p
       v-if="testResult"
       class="alert"

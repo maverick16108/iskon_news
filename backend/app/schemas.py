@@ -160,6 +160,8 @@ class ArticleListItem(ArticleOut):
     post_status: PostStatus | None
     post_char_count: int | None
     image_count: int
+    is_viewed: bool = False          # открывал ли эту новость текущий пользователь
+    viewed_at: datetime | None = None
 
 
 # --- Шаблоны промптов -------------------------------------------------------
@@ -260,6 +262,14 @@ class TelegramChannelCreate(BaseModel):
 
 class TelegramChannelUpdate(BaseModel):
     is_enabled: bool | None = None
+
+
+class TelegramState(BaseModel):
+    """Что произойдёт при нажатии «Опубликовать»."""
+
+    is_enabled: bool
+    ready: list[str] = []      # каналы, готовые принять пост
+    blocked: list[str] = []    # отмечены, но бот там публиковать не может
 
 
 class TelegramInfo(BaseModel):

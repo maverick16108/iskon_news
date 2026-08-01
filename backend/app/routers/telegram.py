@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.deps import DbDep, SuperAdmin, write_audit
+from app.deps import CurrentUser, DbDep, SuperAdmin, write_audit
 from app.models import TelegramChannel, TelegramSettings
 from app.schemas import (
     Message,
@@ -17,6 +17,7 @@ from app.schemas import (
     TelegramInfo,
     TelegramSettingsOut,
     TelegramSettingsUpdate,
+    TelegramState,
 )
 from app.telegram.client import TelegramError, check_bot, check_channel
 from app.telegram.config import ensure_row
@@ -93,6 +94,20 @@ async def update_settings(
     )
     await db.commit()
     return _settings_out(await _load(db))
+
+
+@router.get("/state", response_model=TelegramState)
+async def state(db: DbDep, user: CurrentUser):
+    """Уйдёт ли пост в канал. Нужно редактору перед публикацией."""
+    row = await _load(db)
+    ready = [c for c in row.channels if c.is_enabled and c.can_post]
+    blocked = [c for c in row.channels if c.is_enabled and not c.can_post]
+
+    return TelegramState(
+        is_enabled=row.is_enabled,
+        ready=[c.title or c.chat for c in ready],
+        blocked=[c.title or c.chat for c in blocked],
+    )
 
 
 @router.get("/info", response_model=TelegramInfo)

@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { api, type PlaceholderInfo, type PromptTemplate } from '@/api'
+import ToastStack from '@/components/ToastStack.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -144,7 +145,7 @@ onMounted(async () => {
       </span>
     </div>
 
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
+    <ToastStack :error="error" @clear-error="error = ''" />
 
     <section class="ws-surface">
       <div class="ws-surface-head">

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import { api, type TelegramChannel, type TelegramInfo, type TelegramSettings } from '@/api'
+import ToastStack from '@/components/ToastStack.vue'
 import { formatDate } from '@/labels'
 
 const settings = ref<TelegramSettings | null>(null)
@@ -119,8 +120,12 @@ onMounted(load)
 
 <template>
   <div>
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
-    <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
+    <ToastStack
+      :error="error"
+      :notice="notice"
+      @clear-error="error = ''"
+      @clear-notice="notice = ''"
+    />
 
     <!-- Кто подключён -->
     <section class="ws-surface" style="margin-bottom: 16px; max-width: 860px">

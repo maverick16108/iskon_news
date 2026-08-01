@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 
 import { api, type FetchResult, type PromptTemplate, type Source, type SourceKind } from '@/api'
 import TableSkeleton from '@/components/TableSkeleton.vue'
+import ToastStack from '@/components/ToastStack.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
 import { formatDate } from '@/labels'
@@ -17,6 +18,8 @@ const busyId = ref<number | null>(null)
 const error = ref('')
 const notice = ref('')
 const showForm = ref(false)
+const editingId = ref<number | null>(null)   // null — форма заводит новый источник
+const formCard = ref<HTMLElement | null>(null)
 
 type SortKey = 'name' | 'url' | 'kind' | 'signature' | 'fetched' | 'prompt' | 'state'
 const sortKey = ref<SortKey>('name')
@@ -117,29 +120,72 @@ async function load() {
   }
 }
 
-async function create() {
+function resetForm() {
+  Object.assign(form, {
+    name: '',
+    url: '',
+    kind: 'rss',
+    signature_name: '',
+    signature_suffix: 'website',
+    fetch_interval_minutes: 60,
+    prompt_template_id: '',
+  })
+  editingId.value = null
+}
+
+/** Открывает ту же форму, но на правку существующего источника. */
+function startEdit(source: Source) {
+  Object.assign(form, {
+    name: source.name,
+    url: source.url,
+    kind: source.kind,
+    signature_name: source.signature_name ?? '',
+    signature_suffix: source.signature_suffix,
+    fetch_interval_minutes: source.fetch_interval_minutes,
+    prompt_template_id: source.prompt_template_id ?? '',
+  })
+  editingId.value = source.id
+  showForm.value = true
   error.value = ''
   notice.value = ''
-  try {
-    await api.post<Source>('/api/sources', {
-      ...form,
-      signature_name: form.signature_name || null,
-      prompt_template_id: form.prompt_template_id === '' ? null : form.prompt_template_id,
-    })
-    notice.value = `Источник «${form.name}» добавлен`
-    Object.assign(form, {
-      name: '',
-      url: '',
-      signature_name: '',
-      kind: 'rss',
-      signature_suffix: 'website',
-      fetch_interval_minutes: 60,
-      prompt_template_id: '',
-    })
+  // Форма над таблицей: без прокрутки при длинном списке её не видно
+  requestAnimationFrame(() => formCard.value?.scrollIntoView({ block: 'nearest' }))
+}
+
+function toggleForm() {
+  if (showForm.value) {
     showForm.value = false
+    resetForm()
+  } else {
+    resetForm()
+    showForm.value = true
+  }
+}
+
+async function save() {
+  error.value = ''
+  notice.value = ''
+
+  const payload = {
+    ...form,
+    signature_name: form.signature_name || null,
+    prompt_template_id: form.prompt_template_id === '' ? null : form.prompt_template_id,
+  }
+
+  try {
+    if (editingId.value === null) {
+      await api.post<Source>('/api/sources', payload)
+      notice.value = `Источник «${form.name}» добавлен`
+    } else {
+      await api.patch<Source>(`/api/sources/${editingId.value}`, payload)
+      notice.value = `Источник «${form.name}» сохранён`
+    }
+    showForm.value = false
+    resetForm()
     await load()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось добавить источник'
+    const fallback = editingId.value === null ? 'Не удалось добавить источник' : 'Не удалось сохранить источник'
+    error.value = e instanceof Error ? e.message : fallback
   }
 }
 
@@ -207,22 +253,26 @@ onMounted(async () => {
     <div class="ws-control-bar">
       <span class="muted" style="font-size: 13px">Всего источников: {{ sources.length }}</span>
       <span class="row-end">
-        <button
-          v-if="auth.isSuperadmin"
-          class="ws-btn ws-btn-primary"
-          @click="showForm = !showForm"
-        >
+        <button v-if="auth.isSuperadmin" class="ws-btn ws-btn-primary" @click="toggleForm">
           {{ showForm ? 'Отмена' : 'Добавить источник' }}
         </button>
       </span>
     </div>
 
-    <p v-if="error" class="alert alert-error" style="margin-bottom: 12px">{{ error }}</p>
-    <p v-if="notice" class="alert alert-success" style="margin-bottom: 12px">{{ notice }}</p>
+    <ToastStack
+      :error="error"
+      :notice="notice"
+      @clear-error="error = ''"
+      @clear-notice="notice = ''"
+    />
 
-    <section v-if="showForm" class="ws-surface" style="margin-bottom: 16px">
-      <div class="ws-surface-head"><h2 class="ws-surface-title">Новый источник</h2></div>
-      <form class="ws-surface-body stack" @submit.prevent="create">
+    <section v-if="showForm" ref="formCard" class="ws-surface" style="margin-bottom: 16px">
+      <div class="ws-surface-head">
+        <h2 class="ws-surface-title">
+          {{ editingId === null ? 'Новый источник' : `Правка источника «${form.name}»` }}
+        </h2>
+      </div>
+      <form class="ws-surface-body stack" @submit.prevent="save">
         <div class="ws-field">
           <label class="ws-field-label">Название</label>
           <input v-model="form.name" class="ws-input" required placeholder="ISKCON News" />
@@ -288,7 +338,10 @@ onMounted(async () => {
           />
         </div>
         <div class="row">
-          <button class="ws-btn ws-btn-primary" type="submit">Добавить</button>
+          <button class="ws-btn ws-btn-primary" type="submit">
+            {{ editingId === null ? 'Добавить' : 'Сохранить' }}
+          </button>
+          <button class="ws-btn ws-btn-quiet" type="button" @click="toggleForm">Отмена</button>
         </div>
       </form>
     </section>
@@ -356,6 +409,7 @@ onMounted(async () => {
                     {{ busyId === source.id ? 'Собираем…' : 'Собрать' }}
                   </button>
                   <template v-if="auth.isSuperadmin">
+                    <button class="ws-btn ws-btn-quiet" @click="startEdit(source)">Править</button>
                     <button class="ws-btn ws-btn-quiet" @click="toggleActive(source)">
                       {{ source.is_active ? 'Отключить' : 'Включить' }}
                     </button>

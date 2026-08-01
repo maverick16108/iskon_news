@@ -145,6 +145,28 @@ class Article(Base):
         return self.content or self.summary or ""
 
 
+class ArticleView(Base):
+    """Кто из редакторов открывал новость.
+
+    Нужно, чтобы в ленте отличать непросмотренное. Запись per-user, а не
+    одна на статью: у каждого редактора свой «прочитано».
+    """
+
+    __tablename__ = "article_views"
+    __table_args__ = (UniqueConstraint("article_id", "user_id", name="uq_article_view"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user: Mapped[User] = relationship()
+
+    viewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class ArticleImage(Base):
     """Картинка из новости.
 
