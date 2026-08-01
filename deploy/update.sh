@@ -53,7 +53,21 @@ sleep 6
 systemctl is-active "$SERVICE"
 
 say "Проверка"
-curl -fsS --max-time 15 http://127.0.0.1:8101/api/health && echo
-curl -fsS -o /dev/null -w 'https://news.prema.su -> HTTP %{http_code}\n' --max-time 20 https://news.prema.su/
+
+# systemctl возвращает управление раньше, чем uvicorn успевает занять порт,
+# поэтому ждём, а не спрашиваем один раз сразу после перезапуска
+for attempt in $(seq 1 20); do
+    if curl -fsS --max-time 5 http://127.0.0.1:8101/api/health; then
+        echo
+        break
+    fi
+    if [ "$attempt" = 20 ]; then
+        echo "Бэкенд не ответил за 20 секунд — смотрите journalctl -u iskcon-news" >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+curl -fsS -o /dev/null -w 'https://news.prema.su -> HTTP %{http_code}\n' --max-time 20 https://news.prema.su/api/health
 
 say "Обновление завершено"
