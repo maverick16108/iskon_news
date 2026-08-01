@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { api, type ArticleListItem, type FetchResult, type PostStatus, type Source } from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
@@ -20,6 +20,7 @@ import {
 const PAGE_SIZE = 50
 
 const router = useRouter()
+const route = useRoute()
 
 const articles = ref<ArticleListItem[]>([])
 const sources = ref<Source[]>([])
@@ -41,8 +42,13 @@ const sentinel = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
 type SortKey = 'published' | 'fetched' | 'title' | 'source' | 'quality' | 'post' | 'chars'
-const sortKey = ref<SortKey>('published')
-const sortAsc = ref(false)
+const SORT_KEYS: SortKey[] = ['published', 'fetched', 'title', 'source', 'quality', 'post', 'chars']
+
+// Сортировку можно задать адресом: бот приводит сюда со ссылкой
+// ?sort=fetched, чтобы только что собранные новости были сверху
+const initialSort = SORT_KEYS.find((key) => key === route.query.sort)
+const sortKey = ref<SortKey>(initialSort ?? 'published')
+const sortAsc = ref(route.query.order === 'asc')
 
 const sourceOptions = computed<SelectOption[]>(() => [
   { value: '', label: 'Все источники' },

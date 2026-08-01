@@ -123,7 +123,11 @@ def render_summary(summary: FetchSummary, *, after_fetch: bool) -> str:
     lines.append(f"Готовы к публикации: {summary.ready_to_publish}")
     lines.append(f"Не просмотрено: {summary.unviewed}")
     lines.append("")
-    lines.append(f'<a href="{html.escape(portal)}">Открыть портал и опубликовать</a>')
+    # Ссылка ведёт в ленту, отсортированную по добавлению: у свежесобранных
+    # новостей дата публикации бывает старой, и при сортировке по ней они
+    # оказываются в конце списка — «12 новых» найти было негде.
+    target = f"{portal}/?sort=fetched&order=desc" if after_fetch else portal
+    lines.append(f'<a href="{html.escape(target)}">Открыть портал и опубликовать</a>')
 
     return "\n".join(lines)
 
