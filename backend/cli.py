@@ -210,6 +210,55 @@ async def backfill_images(limit: int) -> int:
     return 0
 
 
+async def slow_sync(months: int, issues: int, delay: float, limit: int) -> int:
+    """Медленная догрузка глубокой истории.
+
+    Обычный часовой обход берёт два последних месяца — столько сайты отдают
+    без отказов. Эта команда идёт глубже, но с большой паузой между
+    запросами: за час она заберёт немного, зато dandavats не начнёт
+    отвечать 429, как при попытке взять четыреста статей залпом.
+    """
+    from app.models import SourceKind
+    from app.parsers.archive import collect_posts as collect_archive
+    from app.parsers.ingest import FoundPost, ingest
+    from app.parsers.newsletter import collect_posts as collect_newsletter
+    from app.parsers.rss import _posts_from_feed
+
+    async with SessionFactory() as db:
+        sources = list(await db.scalars(select(Source).where(Source.is_active.is_(True))))
+
+        for source in sources:
+            print(f"\n=== {source.name} ({source.kind.value}) ===", flush=True)
+            try:
+                if source.kind is SourceKind.archive:
+                    found = await collect_archive(source.url, months_back=months, limit=2000)
+                    posts = [
+                        FoundPost(url=p.url, title=p.title, published_at=p.published_at)
+                        for p in found
+                    ]
+                elif source.kind is SourceKind.newsletter:
+                    found = await collect_newsletter(source.url, issues_back=issues, limit=2000)
+                    posts = [
+                        FoundPost(url=p.url, title=p.title, published_at=p.published_at)
+                        for p in found
+                    ]
+                else:
+                    posts = await _posts_from_feed(source)
+
+                print(f"найдено ссылок: {len(posts)}", flush=True)
+                result = await ingest(source, db, posts, limit=limit, delay_seconds=delay)
+                print(
+                    f"добавлено: {result.added}, с текстом: {result.with_full_text}, "
+                    f"фото: {result.images}, видео: {result.videos}, "
+                    f"архивных: {result.archived}, повторов: {result.repeats}",
+                    flush=True,
+                )
+            except Exception as exc:  # noqa: BLE001 — один источник не валит остальные
+                print(f"  ошибка: {exc}", flush=True)
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Служебные команды проекта")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -224,6 +273,12 @@ def main() -> int:
     backfill = sub.add_parser("backfill-images", help="догрузить картинки к старым статьям")
     backfill.add_argument("--limit", type=int, default=100)
 
+    slow = sub.add_parser("slow-sync", help="медленно догрузить глубокую историю источников")
+    slow.add_argument("--months", type=int, default=6, help="глубина архива в месяцах")
+    slow.add_argument("--issues", type=int, default=12, help="сколько выпусков рассылки")
+    slow.add_argument("--delay", type=float, default=8.0, help="пауза между статьями, секунд")
+    slow.add_argument("--limit", type=int, default=150, help="сколько статей добавить за проход")
+
     args = parser.parse_args()
 
     if args.command == "createsuperuser":
@@ -234,6 +289,8 @@ def main() -> int:
         return asyncio.run(fetch_all())
     if args.command == "backfill-images":
         return asyncio.run(backfill_images(args.limit))
+    if args.command == "slow-sync":
+        return asyncio.run(slow_sync(args.months, args.issues, args.delay, args.limit))
     return 1
 
 

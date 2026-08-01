@@ -82,10 +82,11 @@ async def _posts_from_feed(source: Source) -> list[FoundPost]:
 
 
 async def _posts_from_archive(source: Source) -> list[FoundPost]:
-    # Полгода вглубь, а не два месяца: за один заход всё равно обрабатывается
-    # не больше limit новых, поэтому архив добирается постепенно, от обхода
-    # к обходу, не заваливая сайт запросами.
-    found = await collect_posts(source.url, months_back=6, limit=400)
+    # Два месяца: столько dandavats отдаёт без отказов. Более глубокая
+    # история добирается отдельным медленным заданием (cli.py slow-sync),
+    # а не каждым часовым обходом: полгода — это 48 страниц списка за раз,
+    # и сайт начинает отвечать 429 ещё до статей.
+    found = await collect_posts(source.url, months_back=2, limit=120)
     return [
         FoundPost(url=post.url, title=post.title, published_at=post.published_at)
         for post in found
@@ -93,7 +94,7 @@ async def _posts_from_archive(source: Source) -> list[FoundPost]:
 
 
 async def _posts_from_newsletter(source: Source) -> list[FoundPost]:
-    found = await collect_newsletter(source.url, issues_back=12, limit=400)
+    found = await collect_newsletter(source.url, issues_back=4, limit=200)
     return [
         FoundPost(url=post.url, title=post.title, published_at=post.published_at)
         for post in found

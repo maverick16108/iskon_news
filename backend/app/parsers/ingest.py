@@ -93,7 +93,12 @@ async def _remember_mention(
 
 
 async def ingest(
-    source: Source, session: AsyncSession, posts: list[FoundPost], *, limit: int
+    source: Source,
+    session: AsyncSession,
+    posts: list[FoundPost],
+    *,
+    limit: int,
+    delay_seconds: float = POLITE_DELAY_SECONDS,
 ) -> IngestResult:
     result = IngestResult(entries=len(posts))
     posts = posts[:limit]
@@ -118,7 +123,7 @@ async def ingest(
         videos: list = []
         try:
             if fetched_count:
-                await asyncio.sleep(POLITE_DELAY_SECONDS)
+                await asyncio.sleep(delay_seconds)
             html = await fetch_html(post.url)
             fetched_count += 1
             content = extract_text(html)

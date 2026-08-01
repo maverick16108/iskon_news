@@ -1122,6 +1122,11 @@ textarea.ws-input {
   white-space: nowrap;
 }
 
+.no-post-note {
+  font-size: 11px;
+  font-style: italic;
+}
+
 .archive-toggle {
   flex-wrap: nowrap;
 }

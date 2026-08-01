@@ -382,6 +382,16 @@ watch([sourceFilter, statusFilter, includeArchive], load)
                 >
                   {{ POST_STATUS_LABELS[article.post_status] }}
                 </span>
+                <!-- Пусто по разным причинам: у одних просто ещё не делали
+                     пост, а у других его и не сделать — на странице источника
+                     один плеер без текста. Это две разные ситуации. -->
+                <span
+                  v-else-if="article.content_quality === 'empty'"
+                  class="muted no-post-note"
+                  title="На странице источника нет текста — перерабатывать нечего"
+                >
+                  нечего перерабатывать
+                </span>
                 <span v-else class="muted">—</span>
               </td>
               <td class="num">
