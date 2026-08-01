@@ -13,6 +13,8 @@ from app.deps import CurrentUser, DbDep, write_audit
 from app.models import Article, ArticleImage, ContentQuality, Post, PostStatus, Source
 from app.parsers.fetch import FetchError
 from app.parsers.imagecache import ensure_cached, local_path, media_type_for, save_upload
+from app.telegram.client import TelegramError, render_html, send_post
+from app.telegram.config import current as telegram_config
 from app.schemas import ArticleDetail, ArticleListItem, ImageOut, ImageUpdate, Message, PostOut, PostUpdate
 
 log = logging.getLogger(__name__)
@@ -228,8 +230,58 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
     if not post.title.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не заполнен заголовок")
 
+    # Отправляем в канал, если публикация включена в настройках.
+    # Пока выключена — кнопка просто помечает пост, как раньше.
+    config = await telegram_config()
+    sent = None
+
+    if config.enabled:
+        if not config.token:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Публикация в канал включена, но токен бота не задан",
+            )
+
+        images = list(
+            await db.scalars(
+                select(ArticleImage)
+                .where(ArticleImage.article_id == article_id, ArticleImage.is_selected.is_(True))
+                .order_by(ArticleImage.position)
+            )
+        )
+
+        paths = []
+        for image in images:
+            try:
+                if image.local_file:
+                    path = local_path(image.local_file)
+                elif image.url:
+                    path, _ = await ensure_cached(image.url)
+                else:
+                    continue
+                if path.exists():
+                    paths.append(path)
+            except FetchError as exc:
+                log.warning("Фото %s не удалось подготовить: %s", image.id, exc)
+
+        text = render_html(
+            post.hashtags, post.title, post.body, post.signature, "Новости ИСККОН t.me/iskconru"
+        )
+
+        try:
+            sent = await send_post(
+                token=config.token, channel=config.channel, text=text, photos=paths
+            )
+        except TelegramError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, f"Telegram не принял пост: {exc}"
+            ) from exc
+
     post.status = PostStatus.published
     post.published_at = datetime.now(timezone.utc)
+    if sent:
+        post.telegram_message_id = sent.message_id
+        post.telegram_url = sent.url
 
     await write_audit(
         db,
@@ -237,7 +289,11 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
         action="post.publish",
         entity_type="article",
         entity_id=article_id,
-        details={"chars": post.char_count, "hashtags": post.hashtags},
+        details={
+            "chars": post.char_count,
+            "hashtags": post.hashtags,
+            **({"telegram": sent.url} if sent else {"telegram": "не отправлялось"}),
+        },
         request=request,
     )
     await db.commit()

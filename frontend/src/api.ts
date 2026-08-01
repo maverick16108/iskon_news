@@ -100,6 +100,8 @@ export interface Post {
   rendered: string
   char_count: number
   is_within_limit: boolean
+  /** Ссылка на сообщение в канале, если пост туда ушёл */
+  telegram_url: string | null
 }
 
 export interface Article {
@@ -199,6 +201,23 @@ export interface LlmTestResult {
   message: string
   model: string | null
   elapsed_ms: number | null
+}
+
+export interface TelegramSettings {
+  channel: string
+  is_enabled: boolean
+  token_set: boolean
+  token_hint: string | null
+  updated_at: string
+  updated_by: string | null
+}
+
+export interface TelegramCheckResult {
+  ok: boolean
+  message: string
+  bot: string | null
+  channel_title: string | null
+  can_post: boolean | null
 }
 
 export const MAX_POST_CHARS = 1000

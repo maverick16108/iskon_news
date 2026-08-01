@@ -222,6 +222,9 @@ class Post(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Куда ушёл пост в канале: id сообщения и прямая ссылка
+    telegram_message_id: Mapped[int | None] = mapped_column(Integer)
+    telegram_url: Mapped[str | None] = mapped_column(String(255))
 
     edited_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     edited_by: Mapped[User | None] = relationship(foreign_keys=[edited_by_id])
@@ -277,6 +280,41 @@ class PromptTemplate(Base):
     updated_by: Mapped[User | None] = relationship()
 
     sources: Mapped[list[Source]] = relationship(back_populates="prompt_template")
+
+
+# --------------------------------------------------------------------------
+# Настройки публикации в Telegram
+# --------------------------------------------------------------------------
+
+class TelegramSettings(Base):
+    """Одна строка на всё приложение.
+
+    Публикуем через Bot API: это штатный способ. Альтернатива — клиент
+    MTProto от имени живого аккаунта — потребовала бы хранить на сервере
+    сессию личного аккаунта, а это полный доступ к переписке.
+    """
+
+    __tablename__ = "telegram_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+
+    bot_token: Mapped[str | None] = mapped_column(String(255))
+    channel: Mapped[str] = mapped_column(String(128), default="@iskconru")
+    # Пока выключено, кнопка «Опубликовать» только помечает пост в базе
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by: Mapped[User | None] = relationship()
+
+    @property
+    def token_hint(self) -> str | None:
+        """Хвост токена для интерфейса — сам токен наружу не отдаём."""
+        if not self.bot_token:
+            return None
+        return f"…{self.bot_token[-4:]}" if len(self.bot_token) > 8 else "…"
 
 
 # --------------------------------------------------------------------------

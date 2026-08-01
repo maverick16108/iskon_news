@@ -48,6 +48,12 @@ const router = createRouter({
       meta: { title: 'Настройки модели', superadmin: true },
     },
     {
+      path: '/settings/telegram',
+      name: 'telegram-settings',
+      component: () => import('@/views/TelegramSettingsView.vue'),
+      meta: { title: 'Публикация в канал', superadmin: true },
+    },
+    {
       path: '/audit',
       name: 'audit',
       component: () => import('@/views/AuditView.vue'),

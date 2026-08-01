@@ -54,6 +54,12 @@ defineProps<{ name: string }>()
       <path d="M6.5 12.5l2 2 4-4.5" />
     </template>
 
+    <!-- Публикация в канал -->
+    <template v-else-if="name === 'telegram'">
+      <path d="M17.5 3.5 2.5 9.2l4.6 1.7 1.8 4.9 2.4-3 4 3z" />
+      <path d="M7.1 10.9 17.5 3.5" />
+    </template>
+
     <!-- Фотографии -->
     <template v-else-if="name === 'photo'">
       <rect x="2.5" y="4.5" width="15" height="11" rx="2" />

@@ -59,6 +59,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'prompt.create': 'Создан шаблон промпта',
   'prompt.update': 'Изменён шаблон промпта',
   'prompt.delete': 'Удалён шаблон промпта',
+  'telegram.update': 'Изменены настройки публикации',
 }
 
 export function formatDate(value: string | null): string {

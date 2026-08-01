@@ -102,6 +102,7 @@ class PostOut(ORMModel):
     rendered: str
     char_count: int
     is_within_limit: bool
+    telegram_url: str | None = None
 
 
 class PostUpdate(BaseModel):
@@ -222,6 +223,32 @@ class LlmTestResult(BaseModel):
 
 class ModelList(BaseModel):
     models: list[str]
+
+
+# --- Публикация в Telegram --------------------------------------------------
+
+class TelegramSettingsOut(BaseModel):
+    channel: str
+    is_enabled: bool
+    # Сам токен наружу не отдаём — только признак и последние символы
+    token_set: bool
+    token_hint: str | None
+    updated_at: datetime
+    updated_by: str | None
+
+
+class TelegramSettingsUpdate(BaseModel):
+    bot_token: str | None = Field(default=None, max_length=255)
+    channel: str | None = Field(default=None, min_length=2, max_length=128)
+    is_enabled: bool | None = None
+
+
+class TelegramCheckResult(BaseModel):
+    ok: bool
+    message: str
+    bot: str | None = None
+    channel_title: str | None = None
+    can_post: bool | None = None
 
 
 # --- Журнал ---------------------------------------------------------------

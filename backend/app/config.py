@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o"
 
+    telegram_bot_token: str = ""
+    telegram_channel: str = "@iskconru"
+
     # Время жизни сессии, часов
     session_ttl_hours: int = 24 * 14
 
