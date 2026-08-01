@@ -220,7 +220,8 @@ async function fetchOne(source: Source) {
     notice.value =
       `${result.source}: записей ${result.entries}, добавлено ${result.added},` +
       ` с полным текстом ${result.with_full_text}` +
-      (result.repeats ? `, уже были от других источников ${result.repeats}` : '')
+      (result.repeats ? `, уже были от других источников ${result.repeats}` : '') +
+      (result.unreachable ? `, не открылись ${result.unreachable} — отложены до следующего обхода` : '')
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Сбор не удался'

@@ -202,6 +202,8 @@ export interface FetchResult {
   videos: number
   /** Переиздания старых записей */
   archived: number
+  /** Источник не отдал страницу — отложены до следующего обхода */
+  unreachable: number
   /** Уже были в ленте от другого источника */
   repeats: number
 }

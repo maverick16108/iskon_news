@@ -63,6 +63,7 @@ class IngestResult:
     images: int = 0
     videos: int = 0
     archived: int = 0        # переиздания старых записей
+    unreachable: int = 0     # источник не отдал страницу, отложены до следующего раза
     repeats: int = 0            # уже были в ленте от другого источника
     skipped_boilerplate: int = 0
     _seen_texts: set[str] = field(default_factory=set, repr=False)
@@ -76,6 +77,7 @@ class IngestResult:
             "images": self.images,
             "videos": self.videos,
             "archived": self.archived,
+            "unreachable": self.unreachable,
             "repeats": self.repeats,
         }
 
@@ -121,6 +123,7 @@ async def ingest(
         content: str | None = None
         images: list = []
         videos: list = []
+        fetch_failed = False
         try:
             if fetched_count:
                 await asyncio.sleep(delay_seconds)
@@ -130,7 +133,16 @@ async def ingest(
             images = extract_images(html, post.url)
             videos = extract_videos(html, post.url)
         except FetchError as exc:
+            fetch_failed = True
             log.warning("Полный текст %s недоступен: %s", post.url, exc)
+
+        # Страница не открылась — статью не заводим вовсе. Иначе в ленте
+        # появится карточка с пометкой «нет текста», хотя текст на сайте
+        # есть: сайт просто ответил отказом на очередной запрос. Следующий
+        # обход её подберёт, адрес-то останется новым.
+        if fetch_failed and not post.summary:
+            result.unreachable += 1
+            continue
 
         # Одинаковый текст у разных статей одного источника — верный признак,
         # что вытащили меню или боковую колонку, а не материал.
