@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Source, SourceKind
 from app.parsers.archive import collect_posts
+from app.parsers.newsletter import collect_posts as collect_newsletter
 from app.parsers.fetch import FetchError
 from app.parsers.ingest import FoundPost, ingest
 
@@ -88,6 +89,14 @@ async def _posts_from_archive(source: Source) -> list[FoundPost]:
     ]
 
 
+async def _posts_from_newsletter(source: Source) -> list[FoundPost]:
+    found = await collect_newsletter(source.url, issues_back=4, limit=120)
+    return [
+        FoundPost(url=post.url, title=post.title, published_at=post.published_at)
+        for post in found
+    ]
+
+
 async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) -> dict:
     """Читает источник и добавляет новые статьи.
 
@@ -96,6 +105,8 @@ async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 30) 
     """
     if source.kind is SourceKind.archive:
         posts = await _posts_from_archive(source)
+    elif source.kind is SourceKind.newsletter:
+        posts = await _posts_from_newsletter(source)
     else:
         posts = await _posts_from_feed(source)
 

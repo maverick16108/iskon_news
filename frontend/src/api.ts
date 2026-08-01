@@ -55,7 +55,7 @@ export const api = {
 export type Role = 'superadmin' | 'editor'
 export type PostStatus = 'draft' | 'generating' | 'generated' | 'edited' | 'published' | 'failed'
 export type ContentQuality = 'full' | 'excerpt' | 'empty'
-export type SourceKind = 'rss' | 'archive' | 'html'
+export type SourceKind = 'rss' | 'archive' | 'html' | 'newsletter'
 
 export interface User {
   id: number
@@ -138,6 +138,8 @@ export interface ArticleListItem extends Article {
   image_count: number
   is_viewed: boolean
   viewed_at: string | null
+  repeat_sources: string[]      // другие источники с этим же сюжетом
+  repeat_article_ids: number[]  // двойники под своими адресами
 }
 
 /** Уйдёт ли пост в канал при публикации. Видно любому вошедшему. */
@@ -147,10 +149,18 @@ export interface TelegramState {
   blocked: string[]   // отмечены, но бот там публиковать не может
 }
 
+/** Тот же сюжет в другом источнике. */
+export interface RepeatEntry {
+  source: string
+  url: string | null
+  article_id: number | null
+}
+
 export interface ArticleDetail extends Article {
   content: string | null
   post: Post | null
   images: ArticleImage[]
+  repeats: RepeatEntry[]
 }
 
 export interface AuditEntry {
@@ -171,6 +181,8 @@ export interface FetchResult {
   added: number
   with_full_text: number
   images: number
+  /** Уже были в ленте от другого источника */
+  repeats: number
 }
 
 export interface PromptTemplate {

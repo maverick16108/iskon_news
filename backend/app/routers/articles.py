@@ -14,6 +14,7 @@ from app.deps import CurrentUser, DbDep, write_audit
 from app.models import (
     Article,
     ArticleImage,
+    ArticleMention,
     ArticleView,
     ContentQuality,
     Post,
@@ -34,6 +35,7 @@ from app.schemas import (
     PostOut,
     PostRefine,
     PostUpdate,
+    RepeatEntry,
 )
 
 log = logging.getLogger(__name__)
@@ -52,6 +54,59 @@ SORT_COLUMNS = {
     "title": Article.title,
     "quality": Article.content_quality,
 }
+
+
+async def collect_repeats(
+    db: DbDep, articles: list[Article]
+) -> dict[int, list[RepeatEntry]]:
+    """Где ещё встречается каждый из сюжетов.
+
+    Совпадения бывают двух видов. Точные: дайджест ISKCON Connection даёт
+    ссылку на тот же адрес dandavats, и это одна статья с несколькими
+    упоминаниями. Неточные: один сюжет вышел на двух сайтах под своими
+    адресами — такие сводим по ключу заголовка.
+    """
+    if not articles:
+        return {}
+
+    ids = [a.id for a in articles]
+    keys = {a.title_key for a in articles if a.title_key}
+
+    # Кто принёс — включая источник самой статьи
+    mentions = (
+        await db.execute(
+            select(ArticleMention.article_id, Source.name, ArticleMention.url)
+            .join(Source, Source.id == ArticleMention.source_id)
+            .where(ArticleMention.article_id.in_(ids))
+        )
+    ).all()
+
+    by_article: dict[int, list[RepeatEntry]] = {a.id: [] for a in articles}
+    for article_id, source_name, url in mentions:
+        by_article[article_id].append(RepeatEntry(source=source_name, url=url))
+
+    # Статьи-двойники под другими адресами
+    twins: dict[str, list[tuple[int, str, str]]] = {}
+    if keys:
+        rows = (
+            await db.execute(
+                select(Article.id, Article.title_key, Source.name, Article.url)
+                .join(Source, Source.id == Article.source_id)
+                .where(Article.title_key.in_(keys))
+            )
+        ).all()
+        for twin_id, key, source_name, url in rows:
+            twins.setdefault(key, []).append((twin_id, source_name, url))
+
+    for article in articles:
+        for twin_id, source_name, url in twins.get(article.title_key or "", []):
+            if twin_id == article.id:
+                continue
+            by_article[article.id].append(
+                RepeatEntry(source=source_name, url=url, article_id=twin_id)
+            )
+
+    return by_article
 
 
 @router.get("", response_model=list[ArticleListItem])
@@ -107,6 +162,7 @@ async def list_articles(
     query = query.order_by(direction.nullslast(), Article.id.desc())
 
     rows = (await db.execute(query.limit(limit).offset(offset))).all()
+    repeats = await collect_repeats(db, [article for article, _, _ in rows])
 
     return [
         ArticleListItem(
@@ -117,6 +173,13 @@ async def list_articles(
             image_count=len(article.images),
             is_viewed=viewed_at is not None,
             viewed_at=viewed_at,
+            # В ленте хватает списка названий: подробности — в самой новости
+            repeat_sources=sorted(
+                {e.source for e in repeats.get(article.id, [])} - {source_name}
+            ),
+            repeat_article_ids=sorted(
+                {e.article_id for e in repeats.get(article.id, []) if e.article_id}
+            ),
         )
         for article, source_name, viewed_at in rows
     ]
@@ -142,7 +205,13 @@ async def get_article(article_id: int, db: DbDep, user: CurrentUser):
         )
     )
     await db.commit()
-    return article
+
+    detail = ArticleDetail.model_validate(article)
+    entries = (await collect_repeats(db, [article])).get(article.id, [])
+    # Источник самой статьи в списке «где ещё» лишний
+    own = await db.scalar(select(Source.name).where(Source.id == article.source_id))
+    detail.repeats = [e for e in entries if e.source != own]
+    return detail
 
 
 @router.post("/{article_id}/rewrite", response_model=PostOut)

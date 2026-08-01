@@ -402,9 +402,24 @@ onMounted(async () => {
 
 <template>
   <div class="editor-view">
-    <div v-if="loading" class="editor-grid" aria-busy="true">
+    <!-- Заглушки повторяют будущую разметку, чтобы при появлении данных
+         страница не прыгала: та же панель сверху, те же две карточки -->
+    <template v-if="loading">
+      <div class="ws-control-bar" aria-busy="true">
+        <span class="skeleton skeleton-block" style="width: 92px; height: 30px" />
+        <span class="skeleton skeleton-block" style="width: 130px; height: 30px" />
+        <span class="row-end row">
+          <span class="skeleton skeleton-block" style="width: 110px; height: 22px" />
+          <span class="skeleton skeleton-block" style="width: 160px; height: 30px" />
+        </span>
+      </div>
+
+      <div class="editor-grid" aria-busy="true">
       <section class="ws-surface">
-        <div class="ws-surface-head"><h2 class="ws-surface-title">Исходная статья</h2></div>
+        <div class="ws-surface-head">
+          <h2 class="ws-surface-title">Исходная статья</h2>
+          <span class="skeleton skeleton-block" style="width: 96px; height: 20px" />
+        </div>
         <div class="ws-surface-body stack">
           <span class="skeleton skeleton-text" style="width: 70%; height: 18px" />
           <span class="skeleton skeleton-text" style="width: 40%" />
@@ -412,17 +427,24 @@ onMounted(async () => {
         </div>
       </section>
       <section class="ws-surface">
-        <div class="ws-surface-head"><h2 class="ws-surface-title">Пост для канала</h2></div>
+        <div class="ws-surface-head">
+          <h2 class="ws-surface-title">Пост для канала</h2>
+          <span class="skeleton skeleton-block" style="width: 74px; height: 20px" />
+        </div>
         <div class="ws-surface-body stack">
           <span class="skeleton skeleton-text" style="width: 30%" />
-          <span class="skeleton skeleton-block" style="height: 70px" />
+          <span class="skeleton skeleton-block" style="height: 34px" />
+          <span class="skeleton skeleton-block" style="height: 120px" />
           <span class="skeleton skeleton-text" style="width: 30%" />
           <span class="skeleton skeleton-block" style="height: 34px" />
           <span class="skeleton skeleton-text" style="width: 30%" />
           <span class="skeleton skeleton-block" style="height: 200px" />
+          <span class="skeleton skeleton-text" style="width: 45%" />
+          <span class="skeleton skeleton-block" style="height: 90px" />
         </div>
       </section>
-    </div>
+      </div>
+    </template>
 
     <template v-else-if="article">
       <div class="ws-control-bar">
@@ -488,7 +510,40 @@ onMounted(async () => {
             <p class="muted" style="font-size: 12px; margin-bottom: 12px">
               {{ article.author || 'Автор не указан' }} · {{ formatDate(article.published_at) }}
             </p>
-            <div class="source-text">{{ article.content || article.summary || 'Текста нет' }}</div>
+            <!-- Дайджест ISKCON Connection ссылается на dandavats напрямую,
+                 поэтому один сюжет часто приходит из нескольких источников -->
+            <div v-if="article.repeats.length" class="repeat-note">
+              <b>Эта новость есть и в других источниках.</b>
+              <ul class="repeat-list">
+                <li v-for="(entry, index) in article.repeats" :key="index">
+                  {{ entry.source }} —
+                  <RouterLink
+                    v-if="entry.article_id"
+                    :to="{ name: 'article', params: { id: entry.article_id } }"
+                  >
+                    отдельная карточка в ленте
+                  </RouterLink>
+                  <a v-else-if="entry.url" :href="entry.url" target="_blank" rel="noopener">
+                    тот же адрес
+                  </a>
+                  <span v-else class="muted">тот же адрес</span>
+                </li>
+              </ul>
+            </div>
+
+            <div v-if="article.content || article.summary" class="source-text">
+              {{ article.content || article.summary }}
+            </div>
+            <!-- Пустой текст — обычное дело, а не сбой: на dandavats так
+                 выглядят публикации с видео или аудиозаписью, где на странице
+                 стоит один плеер. Пишем это прямо, чтобы не гадать. -->
+            <p v-else class="alert alert-info" style="margin: 0">
+              На странице источника нет текста — только заголовок. Обычно так
+              выглядят публикации с видеозаписью или аудиолекцией: весь материал
+              в плеере, пересказывать нечего.
+              <a :href="article.url" target="_blank" rel="noopener">Открыть оригинал</a>
+              и посмотреть, что там.
+            </p>
           </div>
         </section>
 

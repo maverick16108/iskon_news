@@ -42,7 +42,19 @@ const KIND_OPTIONS: SelectOption[] = [
     label: 'Помесячный архив',
     hint: 'Адрес главной; месяцы берутся из списка «ARCHIVES» и новые подхватываются сами',
   },
+  {
+    value: 'newsletter',
+    label: 'Архив рассылок',
+    hint: 'Адрес страницы с выпусками; новости берутся по ссылкам из последних выпусков',
+  },
 ]
+
+const KIND_LABELS: Record<string, string> = {
+  rss: 'RSS',
+  archive: 'Архив',
+  newsletter: 'Рассылка',
+  html: 'HTML',
+}
 
 const SUFFIX_OPTIONS: SelectOption[] = [
   { value: 'website', label: 'website' },
@@ -204,7 +216,10 @@ async function fetchOne(source: Source) {
   notice.value = ''
   try {
     const result = await api.post<FetchResult>(`/api/sources/${source.id}/fetch`)
-    notice.value = `${result.source}: записей ${result.entries}, добавлено ${result.added}, с полным текстом ${result.with_full_text}`
+    notice.value =
+      `${result.source}: записей ${result.entries}, добавлено ${result.added},` +
+      ` с полным текстом ${result.with_full_text}` +
+      (result.repeats ? `, уже были от других источников ${result.repeats}` : '')
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Сбор не удался'
@@ -290,7 +305,13 @@ onMounted(async () => {
 
         <div class="ws-field">
           <label class="ws-field-label">
-            {{ form.kind === 'archive' ? 'Адрес главной страницы' : 'Адрес RSS-фида' }}
+            {{
+              form.kind === 'archive'
+                ? 'Адрес главной страницы'
+                : form.kind === 'newsletter'
+                  ? 'Адрес архива рассылок'
+                  : 'Адрес RSS-фида'
+            }}
           </label>
           <input
             v-model="form.url"
@@ -379,7 +400,7 @@ onMounted(async () => {
             <tr v-for="source in sorted" :key="source.id">
               <td>{{ source.name }}</td>
               <td class="mono" style="font-size: 12px">{{ source.url }}</td>
-              <td>{{ source.kind === 'archive' ? 'Архив' : source.kind === 'rss' ? 'RSS' : source.kind }}</td>
+              <td>{{ KIND_LABELS[source.kind] ?? source.kind }}</td>
               <td>«{{ source.signature_name || source.name }}» {{ source.signature_suffix }}</td>
               <td>{{ formatDate(source.last_fetched_at) }}</td>
               <td>

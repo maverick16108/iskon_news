@@ -805,13 +805,14 @@ body {
   color: var(--scheme-success, #2c6b45);
 }
 
+/* Своего потолка у текста нет: высотой распоряжается карточка, она же
+   и прокручивается. Прежние 460px обрезали статью в одном и том же месте,
+   сколько карточку ни расширяй, да ещё и давали вторую полосу прокрутки. */
 .source-text {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 13px;
   line-height: 1.55;
-  max-height: 460px;
-  overflow-y: auto;
   color: var(--scheme-text-secondary, #35414f);
 }
 
@@ -1092,6 +1093,41 @@ textarea.ws-input {
 .toast-leave-to {
   opacity: 0;
   transform: translateY(8px);
+}
+
+.repeat-note {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--scheme-warning-soft, #fdf5e6);
+  border: 1px solid var(--scheme-warning, #d99a2b);
+  color: var(--scheme-text-secondary, #35414f);
+}
+
+.repeat-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+/* Повтор — не ошибка и не тревога, поэтому спокойный янтарный,
+   а не красный: новость просто пришла из нескольких источников. */
+.repeat-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  background: var(--scheme-warning-soft, #fdf5e6);
+  border: 1px solid var(--scheme-warning, #d99a2b);
+  color: var(--scheme-warning, #96660f);
+  white-space: nowrap;
+}
+
+.channel-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .publish-hint {

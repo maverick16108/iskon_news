@@ -334,6 +334,13 @@ watch([sourceFilter, statusFilter], load)
                   <NavIcon name="photo" class="photo-count-icon" />
                   {{ article.image_count }}
                 </span>
+                <span
+                  v-if="article.repeat_sources.length"
+                  class="ws-badge repeat-badge"
+                  :title="`Этот же сюжет есть в источниках: ${article.repeat_sources.join(', ')}`"
+                >
+                  повтор · {{ article.repeat_sources.join(', ') }}
+                </span>
               </td>
               <td>{{ article.source_name }}</td>
               <td>

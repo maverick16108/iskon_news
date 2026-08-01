@@ -209,7 +209,8 @@ onMounted(load)
             <tr>
               <th>Канал</th>
               <th>Название</th>
-              <th>Состояние</th>
+              <th>Права бота</th>
+              <th>Вещаем сюда</th>
               <th>Проверен</th>
               <th></th>
             </tr>
@@ -235,6 +236,26 @@ onMounted(load)
                   {{ channel.last_status }}
                 </div>
               </td>
+              <!-- Флажок, а не кнопка: надпись «Не публиковать» читалась и как
+                   состояние, и как команда — понять, что сейчас включено, было
+                   нельзя. У флажка состояние видно, а щелчок его меняет. -->
+              <td class="wrap">
+                <label class="channel-switch">
+                  <input
+                    type="checkbox"
+                    :checked="channel.is_enabled"
+                    @change="toggleChannel(channel)"
+                  />
+                  <span>{{ channel.is_enabled ? 'Да' : 'Нет' }}</span>
+                </label>
+                <div
+                  v-if="channel.is_enabled && channel.can_post === false"
+                  class="muted"
+                  style="font-size: 11px; margin-top: 4px"
+                >
+                  Отправка сюда сорвётся и остановит рассылку по остальным каналам
+                </div>
+              </td>
               <td>{{ formatDate(channel.last_checked_at) }}</td>
               <td>
                 <div class="row" style="gap: 6px; justify-content: flex-end">
@@ -244,9 +265,6 @@ onMounted(load)
                     @click="checkChannel(channel)"
                   >
                     {{ busyId === channel.id ? 'Проверяем…' : 'Проверить' }}
-                  </button>
-                  <button class="ws-btn ws-btn-quiet" @click="toggleChannel(channel)">
-                    {{ channel.is_enabled ? 'Не публиковать' : 'Публиковать' }}
                   </button>
                   <button class="ws-btn ws-btn-danger" @click="removeChannel(channel)">
                     Убрать

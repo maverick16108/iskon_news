@@ -13,9 +13,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Article, ArticleImage, ContentQuality, Source
+from app.models import (
+    Article,
+    ArticleImage,
+    ArticleMention,
+    ContentQuality,
+    Source,
+    title_key_for,
+)
 from app.parsers.fetch import FetchError, extract_text, fetch_html
 from app.parsers.images import extract_images
 
@@ -50,6 +58,7 @@ class IngestResult:
     added: int = 0
     with_full_text: int = 0
     images: int = 0
+    repeats: int = 0            # уже были в ленте от другого источника
     skipped_boilerplate: int = 0
     _seen_texts: set[str] = field(default_factory=set, repr=False)
 
@@ -60,7 +69,20 @@ class IngestResult:
             "added": self.added,
             "with_full_text": self.with_full_text,
             "images": self.images,
+            "repeats": self.repeats,
         }
+
+
+async def _remember_mention(
+    session: AsyncSession, article_id: int, source_id: int, url: str
+) -> bool:
+    """Отмечает, что источник принёс эту новость. True, если отметка новая."""
+    result = await session.execute(
+        pg_insert(ArticleMention)
+        .values(article_id=article_id, source_id=source_id, url=url)
+        .on_conflict_do_nothing(constraint="uq_article_mention")
+    )
+    return result.rowcount > 0
 
 
 async def ingest(
@@ -76,6 +98,12 @@ async def ingest(
     for post in posts:
         exists = await session.scalar(select(Article.id).where(Article.url == post.url))
         if exists:
+            # Новость уже есть — но пришла ещё и отсюда. Дайджест ISKCON
+            # Connection ссылается на dandavats напрямую, и почти весь его
+            # улов такой. Заводить второй экземпляр незачем, а отметить,
+            # что источников несколько, нужно.
+            if await _remember_mention(session, exists, source.id, post.url):
+                result.repeats += 1
             continue
 
         content: str | None = None
@@ -113,6 +141,7 @@ async def ingest(
             source_id=source.id,
             url=post.url,
             title=post.title.strip(),
+            title_key=title_key_for(post.title),
             author=post.author,
             published_at=post.published_at,
             summary=post.summary,
@@ -134,6 +163,8 @@ async def ingest(
             for index, image in enumerate(images)
         ]
         session.add(article)
+        await session.flush()
+        await _remember_mention(session, article.id, source.id, post.url)
         result.added += 1
         result.images += len(images)
 

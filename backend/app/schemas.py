@@ -149,10 +149,19 @@ class ArticleOut(ORMModel):
     fetched_at: datetime
 
 
+class RepeatEntry(BaseModel):
+    """Где ещё встречается этот же сюжет."""
+
+    source: str
+    url: str | None = None
+    article_id: int | None = None   # если у повтора своя карточка в ленте
+
+
 class ArticleDetail(ArticleOut):
     content: str | None
     post: PostOut | None
     images: list[ImageOut]
+    repeats: list[RepeatEntry] = []   # тот же сюжет в других источниках
 
 
 class ArticleListItem(ArticleOut):
@@ -162,6 +171,10 @@ class ArticleListItem(ArticleOut):
     image_count: int
     is_viewed: bool = False          # открывал ли эту новость текущий пользователь
     viewed_at: datetime | None = None
+    # Все источники, принёсшие этот сюжет: сам источник статьи, все, кто
+    # на неё сослался, и источники статей с таким же заголовком
+    repeat_sources: list[str] = []
+    repeat_article_ids: list[int] = []   # статьи-двойники под другими адресами
 
 
 # --- Шаблоны промптов -------------------------------------------------------
