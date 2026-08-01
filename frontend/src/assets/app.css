@@ -22,6 +22,13 @@ body {
   zoom: var(--ui-scale);
 }
 
+/* Шапка страницы держала высоту под надстрочник, который мы убрали,
+   и между заголовком и содержимым зияла пустота. */
+.workspace-body .ui-page-header {
+  min-height: 0;
+  margin-bottom: 14px;
+}
+
 /* --- Экран входа --------------------------------------------------------- */
 
 .login-screen {
@@ -185,12 +192,20 @@ body {
 .ui-shell .ui-sidebar {
   width: var(--sidebar-width, 232px);
   min-width: var(--sidebar-width, 232px);
-  position: relative;
   display: flex;
   flex-direction: column;
+
+  /* Панель стоит на месте, пока прокручивается основная колонка.
+     align-self: start обязателен: иначе элемент грида растянулся бы на всю
+     высоту строки, и прилипать было бы нечему. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+
   /* Внутри zoom единица vh считается от полной высоты окна в CSS-пикселях,
      а потом результат ещё умножается на масштаб — панель вылезала за экран
      и уносила с собой блок профиля. Поэтому делим на масштаб явно. */
+  height: calc(100vh / var(--ui-scale, 1));
   max-height: calc(100vh / var(--ui-scale, 1));
 }
 
