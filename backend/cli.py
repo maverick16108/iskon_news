@@ -220,7 +220,7 @@ async def slow_sync(months: int, issues: int, delay: float, limit: int) -> int:
     """
     from app.models import SourceKind
     from app.parsers.archive import collect_posts as collect_archive
-    from app.parsers.ingest import FoundPost, ingest
+    from app.parsers.ingest import FoundPost, fetch_cutoff, ingest
     from app.parsers.newsletter import collect_posts as collect_newsletter
     from app.parsers.rss import _posts_from_feed
     from app.worker import LOCK_FETCH, _try_lock, _unlock
@@ -257,7 +257,16 @@ async def slow_sync(months: int, issues: int, delay: float, limit: int) -> int:
                     posts = await _posts_from_feed(source)
 
                 print(f"найдено ссылок: {len(posts)}", flush=True)
-                result = await ingest(source, db, posts, limit=limit, delay_seconds=delay)
+                # Границу возраста спрашиваем ровно так же, как плановый обход:
+                # без этого догрузка тащила из архива всё подряд мимо настройки
+                result = await ingest(
+                    source,
+                    db,
+                    posts,
+                    limit=limit,
+                    delay_seconds=delay,
+                    not_older_than=await fetch_cutoff(db),
+                )
                 print(
                     f"добавлено: {result.added}, с текстом: {result.with_full_text}, "
                     f"фото: {result.images}, видео: {result.videos}, "

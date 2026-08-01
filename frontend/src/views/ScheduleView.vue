@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type FetchSettings } from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
 import ToastStack from '@/components/ToastStack.vue'
+import UiDate from '@/components/UiDate.vue'
 import UiSelect from '@/components/UiSelect.vue'
 import type { SelectOption } from '@/components/select'
 import { formatDate } from '@/labels'
@@ -172,12 +173,10 @@ onMounted(load)
           <label class="ws-field-label">Не собирать новости старше</label>
           <div>
             <div class="row">
-              <input
+              <UiDate
                 v-model="form.min_published_at"
-                class="ws-input"
-                type="date"
-                style="max-width: 180px"
                 :disabled="!auth.isSuperadmin"
+                placeholder="Без ограничения"
               />
               <span class="muted" style="font-size: 13px">или не старше</span>
               <input
