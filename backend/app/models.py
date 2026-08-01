@@ -269,6 +269,14 @@ class ArticleImage(Base):
     is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
     # Загружена редактором вручную, а не взята из новости
     is_uploaded: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Главная картинка поста: уходит в альбом первой, и именно её видно
+    # в ленте канала под свёрнутым постом. На статью такая ровно одна.
+    is_cover: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Обложка ролика, а не кадр из статьи — помечаем, чтобы редактор
+    # понимал, откуда картинка взялась
+    from_video: Mapped[bool] = mapped_column(Boolean, default=False)
     uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
 
@@ -431,6 +439,13 @@ class TelegramChannel(Base):
     )
     settings: Mapped[TelegramSettings] = relationship(back_populates="channels")
 
+    # К какой площадке относится канал. Заполняется миграцией у всех
+    # существующих: до появления MAX площадка была ровно одна.
+    platform_id: Mapped[int | None] = mapped_column(
+        ForeignKey("platforms.id", ondelete="CASCADE"), index=True
+    )
+    platform: Mapped[Platform | None] = relationship(back_populates="channels")
+
     chat: Mapped[str] = mapped_column(String(128), unique=True)   # @имя или числовой id
     title: Mapped[str | None] = mapped_column(String(255))        # подтягивается при проверке
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -479,6 +494,53 @@ class LlmSettings(Base):
 # --------------------------------------------------------------------------
 # Журнал действий
 # --------------------------------------------------------------------------
+
+class PlatformKind(str, enum.Enum):
+    telegram = "telegram"
+    max = "max"          # мессенджер MAX, botapi похож на телеграмный
+
+
+class Platform(Base):
+    """Подключённая площадка: бот в мессенджере и его токен.
+
+    Площадок может быть несколько и разных: у каждой свой токен, свои
+    каналы и свой способ отправки. Раньше настройки были только под
+    Telegram, отсюда и старое имя таблицы каналов.
+    """
+
+    __tablename__ = "platforms"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[PlatformKind] = mapped_column(
+        Enum(PlatformKind, name="platform_kind"), default=PlatformKind.telegram
+    )
+    title: Mapped[str] = mapped_column(String(255))
+
+    # Токен наружу не отдаём никогда — только признак и последние символы
+    token: Mapped[str | None] = mapped_column(String(255))
+
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    bot_username: Mapped[str | None] = mapped_column(String(128))
+    bot_id: Mapped[str | None] = mapped_column(String(64))
+    last_status: Mapped[str | None] = mapped_column(Text)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by: Mapped[User | None] = relationship()
+
+    channels: Mapped[list[TelegramChannel]] = relationship(
+        back_populates="platform", cascade="all, delete-orphan"
+    )
+
+    @property
+    def token_hint(self) -> str | None:
+        return f"…{self.token[-4:]}" if self.token else None
+
 
 class FetchSettings(Base):
     """Расписание обхода источников. Строка всегда одна."""

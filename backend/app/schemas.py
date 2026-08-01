@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import ContentQuality, PostStatus, Role, SourceKind
+from app.models import ContentQuality, PlatformKind, PostStatus, Role, SourceKind
 
 
 class ORMModel(BaseModel):
@@ -128,6 +128,8 @@ class ImageOut(ORMModel):
     height: int | None
     position: int
     is_selected: bool
+    is_cover: bool = False      # главная: уходит в альбом первой
+    from_video: bool = False    # это обложка ролика, а не кадр статьи
 
 
 class VideoOut(ORMModel):
@@ -139,6 +141,7 @@ class VideoOut(ORMModel):
 
 class ImageUpdate(BaseModel):
     is_selected: bool | None = None
+    is_cover: bool | None = None
     caption_ru: str | None = Field(default=None, max_length=300)
 
 
@@ -360,3 +363,51 @@ class BotSubscriberOut(BaseModel):
     is_blocked: bool
     created_at: datetime
     last_notified_at: datetime | None
+
+
+# --- Площадки публикации ----------------------------------------------------
+
+class ChannelOut(BaseModel):
+    id: int
+    platform_id: int | None
+    chat: str
+    title: str | None
+    is_enabled: bool
+    can_post: bool | None
+    last_status: str | None
+    last_checked_at: datetime | None
+
+
+class ChannelCreate(BaseModel):
+    chat: str = Field(min_length=2, max_length=128)
+
+
+class ChannelUpdate(BaseModel):
+    is_enabled: bool | None = None
+
+
+class PlatformOut(BaseModel):
+    id: int
+    kind: PlatformKind
+    title: str
+    is_enabled: bool
+    # Сам токен наружу не отдаём — только признак и последние символы
+    token_set: bool
+    token_hint: str | None
+    bot_username: str | None
+    bot_id: str | None
+    last_status: str | None
+    last_checked_at: datetime | None
+    channels: list[ChannelOut] = []
+
+
+class PlatformCreate(BaseModel):
+    kind: PlatformKind
+    title: str = Field(min_length=1, max_length=255)
+    token: str = Field(default="", max_length=255)
+
+
+class PlatformUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    token: str | None = Field(default=None, max_length=255)
+    is_enabled: bool | None = None

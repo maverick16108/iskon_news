@@ -123,6 +123,11 @@ defineProps<{ name: string }>()
       <path d="M8.4 14.8a1.7 1.7 0 0 0 3.2 0" />
     </template>
 
+    <!-- Главная картинка: звезда -->
+    <template v-else-if="name === 'star'">
+      <path d="M10 3.2l2.1 4.3 4.7.7-3.4 3.3.8 4.7-4.2-2.2-4.2 2.2.8-4.7L3.2 8.2l4.7-.7z" />
+    </template>
+
     <!-- Отметка в своём флажке -->
     <template v-else-if="name === 'tick'">
       <path d="M4.5 10.5l3.5 3.5 7.5-8" />

@@ -152,6 +152,33 @@ async function refetchArticle() {
   }
 }
 
+/** Сделать фотографию главной: она уйдёт в альбом первой. */
+async function makeCover(image: ArticleImage) {
+  if (image.is_cover) return
+
+  const images = article.value?.images ?? []
+  const previous = images.map((i) => ({ id: i.id, cover: i.is_cover, selected: i.is_selected }))
+
+  // Красим сразу: щелчок должен отзываться мгновенно
+  images.forEach((i) => (i.is_cover = i.id === image.id))
+  image.is_selected = true
+
+  try {
+    await api.patch<ArticleImage>(`/api/articles/${articleId}/images/${image.id}`, {
+      is_cover: true,
+    })
+  } catch (e) {
+    previous.forEach((p) => {
+      const found = images.find((i) => i.id === p.id)
+      if (found) {
+        found.is_cover = p.cover
+        found.is_selected = p.selected
+      }
+    })
+    error.value = e instanceof Error ? e.message : 'Не удалось назначить главную'
+  }
+}
+
 /** Вставляет ссылку на ролик в конец текста поста. */
 function addVideoLink(video: ArticleVideo) {
   if (!post.value || draft.value.body.includes(video.url)) return
@@ -689,7 +716,20 @@ onMounted(async () => {
                     >
                       ×
                     </button>
+                    <!-- Главная уходит в альбом первой: именно её видно
+                         в ленте канала под свёрнутым постом -->
+                    <button
+                      type="button"
+                      class="cover-mark"
+                      :class="{ 'is-on': image.is_cover }"
+                      :title="image.is_cover ? 'Это главная фотография поста' : 'Сделать главной'"
+                      :aria-pressed="image.is_cover"
+                      @click.stop="makeCover(image)"
+                    >
+                      <NavIcon name="star" />
+                    </button>
                     <span v-if="image.is_uploaded" class="gallery-badge">своя</span>
+                    <span v-else-if="image.from_video" class="gallery-badge">видео</span>
                     <span class="gallery-caption">
                       {{ image.caption_ru || image.caption || 'Без подписи' }}
                       <span

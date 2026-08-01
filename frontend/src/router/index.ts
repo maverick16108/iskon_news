@@ -33,7 +33,7 @@ const router = createRouter({
       path: '/schedule',
       name: 'schedule',
       component: () => import('@/views/ScheduleView.vue'),
-      meta: { title: 'Расписание сбора' },
+      meta: { title: 'Расписание сбора', superadmin: true },
     },
     {
       path: '/users',
@@ -66,10 +66,10 @@ const router = createRouter({
       meta: { title: 'Настройки модели', superadmin: true },
     },
     {
-      path: '/settings/telegram',
-      name: 'telegram-settings',
-      component: () => import('@/views/TelegramSettingsView.vue'),
-      meta: { title: 'Публикация в канал', superadmin: true },
+      path: '/settings/platforms',
+      name: 'platforms',
+      component: () => import('@/views/PlatformsView.vue'),
+      meta: { title: 'Площадки публикации', superadmin: true },
     },
     {
       path: '/audit',

@@ -176,6 +176,12 @@ onBeforeUnmount(() => {
               <NavIcon name="sources" />
               <span>Источники</span>
             </RouterLink>
+          </nav>
+        </section>
+
+        <section v-if="auth.isSuperadmin" class="ui-nav-section">
+          <div class="ui-nav-label">Администрирование</div>
+          <nav class="ui-nav-list">
             <RouterLink
               class="ui-nav-link"
               :to="{ name: 'schedule' }"
@@ -185,12 +191,6 @@ onBeforeUnmount(() => {
               <NavIcon name="clock" />
               <span>Расписание сбора</span>
             </RouterLink>
-          </nav>
-        </section>
-
-        <section v-if="auth.isSuperadmin" class="ui-nav-section">
-          <div class="ui-nav-label">Администрирование</div>
-          <nav class="ui-nav-list">
             <RouterLink
               class="ui-nav-link"
               :to="{ name: 'users' }"
@@ -220,12 +220,12 @@ onBeforeUnmount(() => {
             </RouterLink>
             <RouterLink
               class="ui-nav-link"
-              :to="{ name: 'telegram-settings' }"
-              data-tip="Публикация в канал"
+              :to="{ name: 'platforms' }"
+              data-tip="Площадки публикации"
               @click="navOpen = false"
             >
               <NavIcon name="telegram" />
-              <span>Публикация в канал</span>
+              <span>Площадки публикации</span>
             </RouterLink>
             <RouterLink
               class="ui-nav-link"

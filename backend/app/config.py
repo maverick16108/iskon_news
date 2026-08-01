@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     # Куда бот зовёт редактора из сводки
     portal_url: str = "https://news.prema.su"
+
+    # Опрос бота ведёт только один экземпляр приложения: Telegram обрывает
+    # getUpdates, если тот же токен спрашивают из двух мест. На машине
+    # разработчика выключаем, иначе он перебивает прод.
+    bot_polling: bool = True
     telegram_channel: str = "@iskconru"
 
     # Время жизни сессии, часов

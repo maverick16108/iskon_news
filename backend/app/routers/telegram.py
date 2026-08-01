@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbDep, SuperAdmin, write_audit
-from app.models import TelegramChannel, TelegramSettings
+from app.models import Platform, TelegramChannel, TelegramSettings
 from app.schemas import (
     Message,
     TelegramChannelCreate,
@@ -98,16 +98,26 @@ async def update_settings(
 
 @router.get("/state", response_model=TelegramState)
 async def state(db: DbDep, user: CurrentUser):
-    """Уйдёт ли пост в канал. Нужно редактору перед публикацией."""
-    row = await _load(db)
-    ready = [c for c in row.channels if c.is_enabled and c.can_post]
-    blocked = [c for c in row.channels if c.is_enabled and not c.can_post]
-
-    return TelegramState(
-        is_enabled=row.is_enabled,
-        ready=[c.title or c.chat for c in ready],
-        blocked=[c.title or c.chat for c in blocked],
+    """Уйдёт ли пост в каналы. Нужно редактору перед публикацией."""
+    platforms = list(
+        await db.scalars(select(Platform).options(selectinload(Platform.channels)))
     )
+
+    ready: list[str] = []
+    blocked: list[str] = []
+    enabled_anywhere = False
+
+    for platform in platforms:
+        if not platform.is_enabled or not platform.token:
+            continue
+        enabled_anywhere = True
+        for channel in platform.channels:
+            if not channel.is_enabled:
+                continue
+            where = f"{channel.title or channel.chat} ({platform.title})"
+            (ready if channel.can_post else blocked).append(where)
+
+    return TelegramState(is_enabled=enabled_anywhere, ready=ready, blocked=blocked)
 
 
 @router.get("/info", response_model=TelegramInfo)

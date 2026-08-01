@@ -137,6 +137,10 @@ export interface ArticleImage {
   height: number | null
   position: number
   is_selected: boolean
+  /** Главная: уходит в альбом первой */
+  is_cover: boolean
+  /** Обложка ролика, а не кадр статьи */
+  from_video: boolean
 }
 
 export interface ArticleListItem extends Article {
@@ -264,6 +268,35 @@ export interface BotSubscriber {
   is_blocked: boolean
   created_at: string
   last_notified_at: string | null
+}
+
+export type PlatformKind = 'telegram' | 'max'
+
+/** Канал площадки. */
+export interface Channel {
+  id: number
+  platform_id: number | null
+  chat: string
+  title: string | null
+  is_enabled: boolean
+  can_post: boolean | null
+  last_status: string | null
+  last_checked_at: string | null
+}
+
+/** Подключённый мессенджер: свой бот, свой токен, свои каналы. */
+export interface Platform {
+  id: number
+  kind: PlatformKind
+  title: string
+  is_enabled: boolean
+  token_set: boolean
+  token_hint: string | null
+  bot_username: string | null
+  bot_id: string | null
+  last_status: string | null
+  last_checked_at: string | null
+  channels: Channel[]
 }
 
 export interface TelegramChannel {

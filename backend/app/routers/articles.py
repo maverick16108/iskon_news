@@ -18,6 +18,8 @@ from app.models import (
     ArticleVideo,
     ArticleView,
     ContentQuality,
+    Platform,
+    PlatformKind,
     Post,
     PostStatus,
     Source,
@@ -28,6 +30,7 @@ from app.parsers.images import extract_images
 from app.parsers.ingest import MIN_FULL_TEXT_CHARS
 from app.parsers.videos import extract_videos
 from app.parsers.imagecache import ensure_cached, local_path, media_type_for, save_upload
+from app.publishers import max as max_api
 from app.telegram.client import TelegramError, render_html, send_post
 from app.telegram.config import current as telegram_config
 from app.schemas import (
@@ -271,10 +274,13 @@ async def refetch_article(article_id: int, request: Request, db: DbDep, user: Cu
         for index, video in enumerate(videos)
     ]
 
-    # У записи лекции своих картинок нет — тогда берём обложку ролика
-    fresh = [(i.url, i.caption, i.width, i.height) for i in images]
-    if not fresh:
-        fresh = [(v.thumbnail_url, None, None, None) for v in videos if v.thumbnail_url]
+    # Обложки роликов идут в галерею вслед за картинками статьи
+    fresh = [(i.url, i.caption, i.width, i.height, False) for i in images]
+    fresh += [
+        (v.thumbnail_url, None, None, None, True)
+        for v in videos
+        if v.thumbnail_url and v.thumbnail_url not in {i.url for i in images}
+    ]
 
     # Загруженные редактором файлы и его отметки сохраняем: перечитывание
     # обновляет то, что пришло с сайта, а не отменяет ручную работу
@@ -287,7 +293,7 @@ async def refetch_article(article_id: int, request: Request, db: DbDep, user: Cu
 
     position = max((img.position for img in article.images), default=-1)
     added = 0
-    for url, caption, width, height in fresh:
+    for url, caption, width, height, from_video in fresh:
         if url in existing or url in kept:
             continue
         position += 1
@@ -300,6 +306,7 @@ async def refetch_article(article_id: int, request: Request, db: DbDep, user: Cu
                 height=height,
                 position=position,
                 is_selected=not article.images,
+                from_video=from_video,
             )
         )
 
@@ -499,33 +506,47 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
     if not post.title.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не заполнен заголовок")
 
-    # Отправляем в канал, если публикация включена в настройках.
-    # Пока выключена — кнопка просто помечает пост, как раньше.
-    config = await telegram_config()
-    sent = None
-
-    if config.enabled:
-        if not config.token:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "Публикация в канал включена, но токен бота не задан",
-            )
-
-        images = list(
-            await db.scalars(
-                select(ArticleImage)
-                .where(ArticleImage.article_id == article_id, ArticleImage.is_selected.is_(True))
-                .order_by(ArticleImage.position)
-            )
+    # Рассылаем по всем включённым площадкам: Telegram, MAX и что ещё
+    # добавят. Каждая со своим токеном и своим способом отправки.
+    platforms = list(
+        await db.scalars(
+            select(Platform)
+            .where(Platform.is_enabled.is_(True))
+            .options(selectinload(Platform.channels))
         )
+    )
 
+    # Главная идёт первой: в ленте канала под свёрнутым постом видно
+    # именно её, остальные — только когда пост раскроют
+    images = list(
+        await db.scalars(
+            select(ArticleImage)
+            .where(ArticleImage.article_id == article_id, ArticleImage.is_selected.is_(True))
+            .order_by(ArticleImage.is_cover.desc(), ArticleImage.position)
+        )
+    )
+
+    sent = None
+    delivered: list[str] = []
+
+    targets = [
+        (platform, channel)
+        for platform in platforms
+        if platform.token
+        for channel in platform.channels
+        if channel.is_enabled
+    ]
+
+    if targets:
         paths = []
+        image_urls = []
         for image in images:
             try:
                 if image.local_file:
                     path = local_path(image.local_file)
                 elif image.url:
                     path, _ = await ensure_cached(image.url)
+                    image_urls.append(image.url)
                 else:
                     continue
                 if path.exists():
@@ -533,39 +554,35 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
             except FetchError as exc:
                 log.warning("Фото %s не удалось подготовить: %s", image.id, exc)
 
-        text = render_html(
-            post.hashtags, post.title, post.body, post.signature, "Новости ИСККОН t.me/iskconru"
-        )
+        channel_line = "Новости ИСККОН t.me/iskconru"
 
-        targets = list(
-            await db.scalars(
-                select(TelegramChannel).where(TelegramChannel.is_enabled.is_(True))
-            )
-        )
-        if not targets:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "Отправка включена, но ни один канал не выбран",
-            )
-
-        # Отправляем по очереди. Если упал первый — не публикуем никуда,
-        # чтобы не оставить пост наполовину разосланным.
-        results = []
-        for index, target in enumerate(targets):
+        # Если первая же отправка не удалась — не публикуем никуда, чтобы
+        # пост не остался разосланным наполовину
+        for index, (platform, channel) in enumerate(targets):
             try:
-                results.append(await send_post(
-                    token=config.token, channel=target.chat, text=text, photos=paths
-                ))
-            except TelegramError as exc:
+                if platform.kind is PlatformKind.telegram:
+                    text = render_html(
+                        post.hashtags, post.title, post.body, post.signature, channel_line
+                    )
+                    result = await send_post(
+                        token=platform.token, channel=channel.chat, text=text, photos=paths
+                    )
+                    if sent is None:
+                        sent = result
+                else:
+                    text = max_api.render_text(
+                        post.hashtags, post.title, post.body, post.signature, channel_line
+                    )
+                    await max_api.send_post(platform.token, channel.chat, text, image_urls)
+
+                delivered.append(f"{platform.title}: {channel.chat}")
+            except (TelegramError, max_api.MaxError) as exc:
                 if index == 0:
                     raise HTTPException(
                         status.HTTP_502_BAD_GATEWAY,
-                        f"Telegram не принял пост в {target.chat}: {exc}",
+                        f"{platform.title} не принял пост в {channel.chat}: {exc}",
                     ) from exc
-                # Первый канал уже принял — остальные ошибки только логируем
-                log.error("Пост не ушёл в %s: %s", target.chat, exc)
-
-        sent = results[0] if results else None
+                log.error("Пост не ушёл в %s (%s): %s", channel.chat, platform.title, exc)
 
     post.status = PostStatus.published
     post.published_at = datetime.now(timezone.utc)
@@ -582,7 +599,7 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
         details={
             "chars": post.char_count,
             "hashtags": post.hashtags,
-            **({"telegram": sent.url} if sent else {"telegram": "не отправлялось"}),
+            "куда ушло": ", ".join(delivered) or "никуда: площадки выключены",
         },
         request=request,
     )
@@ -767,6 +784,23 @@ async def update_image(
     changes = payload.model_dump(exclude_unset=True)
     for field, value in changes.items():
         setattr(image, field, value)
+
+    if changes.get("is_cover"):
+        # Главная на статью ровно одна: снимаем отметку с остальных
+        others = await db.scalars(
+            select(ArticleImage).where(
+                ArticleImage.article_id == article_id, ArticleImage.id != image.id
+            )
+        )
+        for other in others:
+            other.is_cover = False
+        # Главная всегда идёт в пост: отмечать её отдельно незачем
+        image.is_selected = True
+
+    # Сняли отметку с главной — снимаем и признак главной, иначе
+    # в альбоме первой оказалась бы картинка, которой там нет
+    if changes.get("is_selected") is False:
+        image.is_cover = False
 
     await write_audit(
         db,

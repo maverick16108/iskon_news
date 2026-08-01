@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
 
+from app.config import settings
 from app.db import SessionFactory
 from app.models import FetchSettings, Source
 from app.parsers.rss import fetch_feed
@@ -131,6 +132,10 @@ async def _report(added: dict[str, int]) -> None:
 
 async def bot_loop() -> None:
     """Длинный опрос Telegram: отвечает людям, которые пишут боту."""
+    if not settings.bot_polling:
+        log.info("Опрос бота выключен в настройках (BOT_POLLING=false)")
+        return
+
     async with SessionFactory() as db:
         if not await _try_lock(db, LOCK_BOT):
             log.info("Бота уже опрашивает другой процесс")

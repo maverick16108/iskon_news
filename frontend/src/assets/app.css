@@ -1294,6 +1294,61 @@ html:not(.kbd-nav) label:focus-within {
   user-select: none;
 }
 
+/* Метка мессенджера: у Telegram и MAX свои цвета, чтобы в списке
+   площадок было видно, где что, не читая подписи */
+.platform-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.platform-tag.is-telegram {
+  background: #e3f0fb;
+  border: 1px solid #2aa3ef;
+  color: #1a6ca8;
+}
+
+.platform-tag.is-max {
+  background: #ece7fb;
+  border: 1px solid #7a5cf0;
+  color: #513aa8;
+}
+
+/* Главная картинка поста: отмечаем звездой в углу плитки */
+.cover-mark {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(9 21 41 / 45%);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.cover-mark:hover,
+.cover-mark.is-on {
+  opacity: 1;
+  background: var(--scheme-accent, #1768ff);
+}
+
+.cover-mark .nav-icon {
+  width: 13px;
+  height: 13px;
+}
+
 .video-list {
   display: flex;
   flex-direction: column;

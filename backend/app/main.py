@@ -12,6 +12,7 @@ from app.routers import (
     articles,
     audit,
     auth,
+    platforms,
     prompts,
     schedule,
     settings as settings_router,
@@ -71,6 +72,7 @@ app.include_router(settings_router.router)
 app.include_router(prompts.router)
 app.include_router(telegram_router.router)
 app.include_router(schedule.router)
+app.include_router(platforms.router)
 
 
 @app.get("/api/health", tags=["service"])

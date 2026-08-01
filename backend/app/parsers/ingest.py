@@ -179,21 +179,36 @@ async def ingest(
             for index, video in enumerate(videos)
         ]
 
-        # У записи лекции своих картинок нет — только обложка ролика.
-        # Без неё пост уходит без иллюстрации, поэтому подставляем её.
-        if not article.images:
-            posters = [v for v in videos if v.thumbnail_url]
-            article.images = [
+        # Обложки роликов кладём в галерею всегда, а не только когда своих
+        # картинок нет: для новости с видео она часто и есть самая говорящая
+        # иллюстрация, и редактор должен иметь возможность её выбрать.
+        seen_urls = {image.url for image in article.images}
+        position = len(article.images)
+        for video in videos:
+            if not video.thumbnail_url or video.thumbnail_url in seen_urls:
+                continue
+            seen_urls.add(video.thumbnail_url)
+            article.images.append(
                 ArticleImage(
                     url=video.thumbnail_url,
                     caption=None,
-                    position=index,
-                    is_selected=index == 0,
+                    position=position,
+                    # Отмечаем только если других картинок не нашлось —
+                    # иначе пост уйдёт без иллюстрации вовсе
+                    is_selected=not images and position == 0,
+                    from_video=True,
                 )
-                for index, video in enumerate(posters)
-            ]
-            if posters and not article.image_url:
-                article.image_url = posters[0].thumbnail_url
+            )
+            position += 1
+
+        # Главная — первая отмеченная
+        for image in article.images:
+            if image.is_selected:
+                image.is_cover = True
+                break
+
+        if not article.image_url and article.images:
+            article.image_url = article.images[0].url
 
         session.add(article)
         await session.flush()
