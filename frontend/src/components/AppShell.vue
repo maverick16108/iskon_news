@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
           title="Развернуть меню"
           @click="collapsed = false"
         >
-          <GarudaMark :size="38" plain style="color: var(--scheme-accent, #1768ff)" />
+          <GarudaMark :size="34" plain style="color: var(--scheme-accent, #1768ff)" />
           <span class="sr-only">Развернуть меню</span>
         </button>
 
@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
           :to="{ name: 'articles' }"
           title="Новости ИСККОН"
         >
-          <GarudaMark :size="38" plain style="color: var(--scheme-accent, #1768ff)" />
+          <GarudaMark :size="34" plain style="color: var(--scheme-accent, #1768ff)" />
           <span class="ui-brand-copy">
             Новости ИСККОН
             <small>Портал публикаций</small>
