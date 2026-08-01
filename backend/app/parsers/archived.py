@@ -46,7 +46,7 @@ _MONTH_RE = "|".join(sorted(MONTHS, key=len, reverse=True))
 
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # 25 March, 1970
-    (re.compile(rf"\b(\d{{1,2}})\s+({_MONTH_RE})\.?,?\s+(20\d\d|19\d\d)\b", re.I), "dMy"),
+    (re.compile(rf"\b(\d{{1,2}})\s*({_MONTH_RE})\.?,?\s*(20\d\d|19\d\d)\b", re.I), "dMy"),
     # March 25, 1970
     (re.compile(rf"\b({_MONTH_RE})\.?\s+(\d{{1,2}}),?\s+(20\d\d|19\d\d)\b", re.I), "Mdy"),
     # 2023.06.27 или 2023-06-27
@@ -72,6 +72,18 @@ def _build(year: int, month: int, day: int) -> date | None:
 OWN_DATE_MARKERS = re.compile(
     r"(lecture|class|talk|letter|recorded|delivered|spoken|given|"
     r"лекция|запись|письмо|прочитан)\w*[^.]{0,60}$",
+    re.I,
+)
+
+# Ссылки на стихи писаний выглядят точно как дата: «ŚB 3.16.18» — это
+# песнь, глава и стих, а не 16 марта 2018 года. Проверяем, что стоит
+# непосредственно перед числом.
+SCRIPTURE_MARKERS = re.compile(
+    r"(s\.?\s?b\.?|ś\.?\s?b\.?|c\.?\s?c\.?|b\.?\s?g\.?|"
+    r"bhagavatam|bhagavad|bhāgavatam|caitanya|caritamrta|caritāmṛta|gita|gītā|"
+    r"canto|madhya|antya|adi|ādi|"
+    r"бхагаватам|бхагавад|чайтанья|чаритамрита|гита|песнь|глава|стих)"
+    r"[\s\-–—|:.]*$",
     re.I,
 )
 
@@ -120,6 +132,10 @@ def content_date(text: str, *, require_marker: bool = False) -> date | None:
     for pattern, order in _PATTERNS:
         match = pattern.search(head)
         if not match:
+            continue
+
+        # Номер стиха писания — не дата, и в заголовке тоже
+        if SCRIPTURE_MARKERS.search(head[: match.start()]):
             continue
 
         if require_marker and not _is_own_date(head, match.start()):
