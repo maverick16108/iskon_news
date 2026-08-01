@@ -560,6 +560,12 @@ class FetchSettings(Base):
     # так в интерфейсе можно и выбрать из списка, и задать своё число.
     interval_minutes: Mapped[int] = mapped_column(Integer, default=60)
 
+    # Граница, старше которой новости не берём. Два способа задать: жёсткая
+    # дата («ничего раньше 1 июля») и скользящее окно («не старше 30 дней»).
+    # Заданы оба — действует более поздняя из двух границ.
+    min_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    max_age_days: Mapped[int | None] = mapped_column(Integer)
+
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_result: Mapped[str | None] = mapped_column(Text)
 

@@ -15,7 +15,7 @@ from app.models import Source, SourceKind
 from app.parsers.archive import collect_posts
 from app.parsers.newsletter import collect_posts as collect_newsletter
 from app.parsers.fetch import FetchError
-from app.parsers.ingest import FoundPost, ingest
+from app.parsers.ingest import FoundPost, fetch_cutoff, ingest
 
 log = logging.getLogger(__name__)
 
@@ -114,5 +114,7 @@ async def fetch_feed(source: Source, session: AsyncSession, *, limit: int = 40) 
     else:
         posts = await _posts_from_feed(source)
 
-    result = await ingest(source, session, posts, limit=limit)
+    result = await ingest(
+        source, session, posts, limit=limit, not_older_than=await fetch_cutoff(session)
+    )
     return result.as_dict(source.name)

@@ -26,6 +26,8 @@ def _out(row: FetchSettings) -> FetchSettingsOut:
     return FetchSettingsOut(
         is_enabled=row.is_enabled,
         interval_minutes=row.interval_minutes,
+        min_published_at=row.min_published_at,
+        max_age_days=row.max_age_days,
         last_run_at=row.last_run_at,
         last_result=row.last_result,
         updated_at=row.updated_at,
@@ -54,6 +56,12 @@ async def update_schedule(
 ):
     row = await get_fetch_settings(db)
     changes = payload.model_dump(exclude_unset=True)
+
+    # Ноль в окне равнозначен «не ограничивать»: иначе пришлось бы объяснять,
+    # чем «0 дней» отличается от пустого поля
+    if changes.get("max_age_days") == 0:
+        changes["max_age_days"] = None
+
     for field, value in changes.items():
         setattr(row, field, value)
     row.updated_by_id = admin.id

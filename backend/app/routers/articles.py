@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
@@ -201,6 +201,44 @@ async def list_articles(
         )
         for article, source_name, viewed_at in rows
     ]
+
+
+@router.post("/mark-all-viewed", response_model=Message)
+async def mark_all_viewed(request: Request, db: DbDep, user: CurrentUser):
+    """Отметить все новости просмотренными текущим пользователем.
+
+    Отметка личная, чужие не трогаем. Архивные тоже отмечаем: они скрыты
+    из ленты, и если их пропустить, счётчик непросмотренных у бота
+    останется ненулевым при пустой ленте.
+    """
+    result = await db.execute(
+        pg_insert(ArticleView)
+        .from_select(
+            ["article_id", "user_id"],
+            select(Article.id, literal(user.id)).where(
+                ~Article.id.in_(
+                    select(ArticleView.article_id).where(ArticleView.user_id == user.id)
+                )
+            ),
+        )
+        .on_conflict_do_nothing(constraint="uq_article_view")
+    )
+    marked = result.rowcount or 0
+
+    await write_audit(
+        db,
+        user=user,
+        action="article.mark_all_viewed",
+        entity_type="article",
+        entity_id=None,
+        details={"отмечено": marked},
+        request=request,
+    )
+    await db.commit()
+
+    if not marked:
+        return Message(detail="Непросмотренных новостей не было")
+    return Message(detail=f"Отмечено просмотренными: {marked}")
 
 
 @router.get("/{article_id}", response_model=ArticleDetail)

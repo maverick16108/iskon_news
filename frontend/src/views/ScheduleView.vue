@@ -18,7 +18,13 @@ const running = ref(false)
 const error = ref('')
 const notice = ref('')
 
-const form = reactive({ is_enabled: false, interval_minutes: 60 })
+const form = reactive({
+  is_enabled: false,
+  interval_minutes: 60,
+  // Пустая строка = «без ограничения». Дата хранится как YYYY-MM-DD для <input type="date">
+  min_published_at: '',
+  max_age_days: '' as number | '',
+})
 
 // Готовые интервалы плюс «своё значение»: чаще пяти минут ходить по сайтам
 // невежливо, реже недели — новости успеют устареть
@@ -33,12 +39,25 @@ const INTERVALS: SelectOption[] = [
   { value: 10080, label: 'Раз в неделю' },
 ]
 
-const dirty = computed(
-  () =>
-    !!settings.value &&
-    (form.is_enabled !== settings.value.is_enabled ||
-      form.interval_minutes !== settings.value.interval_minutes),
-)
+const dirty = computed(() => {
+  const row = settings.value
+  if (!row) return false
+  return (
+    form.is_enabled !== row.is_enabled ||
+    form.interval_minutes !== row.interval_minutes ||
+    form.min_published_at !== (row.min_published_at?.slice(0, 10) ?? '') ||
+    String(form.max_age_days) !== String(row.max_age_days ?? '')
+  )
+})
+
+/** Словами: какие новости сборщик пропустит. */
+const cutoffHint = computed(() => {
+  const parts: string[] = []
+  if (form.min_published_at) parts.push(`вышедшие раньше ${form.min_published_at}`)
+  if (form.max_age_days) parts.push(`старше ${form.max_age_days} дн.`)
+  if (!parts.length) return 'Ограничения нет: собираем всё, что найдём в источниках.'
+  return `Не собираем: ${parts.join(' и ')}. Публикации без даты собираются в любом случае.`
+})
 
 /** Когда ждать следующий обход. */
 const nextRun = computed(() => {
@@ -56,6 +75,8 @@ async function load() {
     settings.value = await api.get<FetchSettings>('/api/settings/schedule')
     form.is_enabled = settings.value.is_enabled
     form.interval_minutes = settings.value.interval_minutes
+    form.min_published_at = settings.value.min_published_at?.slice(0, 10) ?? ''
+    form.max_age_days = settings.value.max_age_days ?? ''
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Не удалось загрузить расписание'
   } finally {
@@ -68,7 +89,13 @@ async function save() {
   error.value = ''
   notice.value = ''
   try {
-    settings.value = await api.patch<FetchSettings>('/api/settings/schedule', { ...form })
+    settings.value = await api.patch<FetchSettings>('/api/settings/schedule', {
+      is_enabled: form.is_enabled,
+      interval_minutes: form.interval_minutes,
+      // Пусто в поле означает «снять ограничение», а не «не менять»
+      min_published_at: form.min_published_at ? `${form.min_published_at}T00:00:00Z` : null,
+      max_age_days: form.max_age_days === '' ? null : Number(form.max_age_days),
+    })
     notice.value = form.is_enabled
       ? 'Расписание сохранено, обход будет идти автоматически'
       : 'Расписание сохранено, автоматический обход выключен'
@@ -138,6 +165,34 @@ onMounted(load)
             <small v-if="settings?.is_enabled" class="muted">
               Следующий обход: {{ nextRun }}
             </small>
+          </div>
+        </div>
+
+        <div class="ws-field">
+          <label class="ws-field-label">Не собирать новости старше</label>
+          <div>
+            <div class="row">
+              <input
+                v-model="form.min_published_at"
+                class="ws-input"
+                type="date"
+                style="max-width: 180px"
+                :disabled="!auth.isSuperadmin"
+              />
+              <span class="muted" style="font-size: 13px">или не старше</span>
+              <input
+                v-model="form.max_age_days"
+                class="ws-input"
+                type="number"
+                min="0"
+                max="3650"
+                placeholder="дней"
+                style="max-width: 110px"
+                :disabled="!auth.isSuperadmin"
+              />
+              <span class="muted" style="font-size: 13px">дней</span>
+            </div>
+            <small class="muted">{{ cutoffHint }}</small>
           </div>
         </div>
 

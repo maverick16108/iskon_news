@@ -202,6 +202,8 @@ export interface FetchResult {
   videos: number
   /** Переиздания старых записей */
   archived: number
+  /** Старше заданной границы возраста */
+  too_old: number
   /** Источник не отдал страницу — отложены до следующего обхода */
   unreachable: number
   /** Уже были в ленте от другого источника */
@@ -260,6 +262,10 @@ export interface TelegramSettings {
 export interface FetchSettings {
   is_enabled: boolean
   interval_minutes: number
+  /** Новости старше этой даты не собираем */
+  min_published_at: string | null
+  /** Либо скользящее окно в днях */
+  max_age_days: number | null
   last_run_at: string | null
   last_result: string | null
   updated_at: string

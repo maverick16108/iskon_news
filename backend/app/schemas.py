@@ -344,6 +344,9 @@ class Message(BaseModel):
 class FetchSettingsOut(BaseModel):
     is_enabled: bool
     interval_minutes: int
+    # Граница возраста: новости старше не собираем
+    min_published_at: datetime | None
+    max_age_days: int | None
     last_run_at: datetime | None
     last_result: str | None
     updated_at: datetime
@@ -352,6 +355,9 @@ class FetchSettingsOut(BaseModel):
 
 class FetchSettingsUpdate(BaseModel):
     is_enabled: bool | None = None
+    min_published_at: datetime | None = None
+    # Ноль и пусто означают «без ограничения по возрасту»
+    max_age_days: int | None = Field(default=None, ge=0, le=3650)
     # От пяти минут до недели: чаще — невежливо к сайтам, реже — смысла нет
     interval_minutes: int | None = Field(default=None, ge=5, le=10080)
 

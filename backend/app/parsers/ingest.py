@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from app.models import (
     ArticleMention,
     ArticleVideo,
     ContentQuality,
+    FetchSettings,
     Source,
     title_key_for,
 )
@@ -64,6 +65,7 @@ class IngestResult:
     images: int = 0
     videos: int = 0
     archived: int = 0        # переиздания старых записей
+    too_old: int = 0         # старше заданной в настройках границы
     unreachable: int = 0     # источник не отдал страницу, отложены до следующего раза
     repeats: int = 0            # уже были в ленте от другого источника
     skipped_boilerplate: int = 0
@@ -78,9 +80,29 @@ class IngestResult:
             "images": self.images,
             "videos": self.videos,
             "archived": self.archived,
+            "too_old": self.too_old,
             "unreachable": self.unreachable,
             "repeats": self.repeats,
         }
+
+
+async def fetch_cutoff(session: AsyncSession) -> datetime | None:
+    """Граница возраста из настроек сборщика.
+
+    Задать можно двумя способами сразу: жёсткой датой и скользящим окном.
+    Действует более поздняя из границ — то есть более строгая.
+    """
+    row = await session.scalar(select(FetchSettings).limit(1))
+    if row is None:
+        return None
+
+    bounds = []
+    if row.min_published_at is not None:
+        bounds.append(row.min_published_at)
+    if row.max_age_days:
+        bounds.append(datetime.now(timezone.utc) - timedelta(days=row.max_age_days))
+
+    return max(bounds) if bounds else None
 
 
 async def _remember_mention(
@@ -102,6 +124,7 @@ async def ingest(
     *,
     limit: int,
     delay_seconds: float = POLITE_DELAY_SECONDS,
+    not_older_than: datetime | None = None,
 ) -> IngestResult:
     result = IngestResult(entries=len(posts))
     posts = posts[:limit]
@@ -111,6 +134,17 @@ async def ingest(
     fetched_count = 0
 
     for post in posts:
+        # Граница возраста. Публикации без даты пропускаем через фильтр:
+        # отсеять их значило бы потерять всё, что источник отдаёт без даты,
+        # а старьё среди них ловится пометкой архивных.
+        if (
+            not_older_than is not None
+            and post.published_at is not None
+            and post.published_at < not_older_than
+        ):
+            result.too_old += 1
+            continue
+
         exists = await session.scalar(select(Article.id).where(Article.url == post.url))
         if exists:
             # Новость уже есть — но пришла ещё и отсюда. Дайджест ISKCON

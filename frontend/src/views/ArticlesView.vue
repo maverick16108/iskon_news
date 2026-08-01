@@ -178,7 +178,9 @@ async function fetchAll() {
           .join(', ')
       : 'Новых публикаций в источниках нет'
     const archived = results.reduce((sum, r) => sum + r.archived, 0)
-    if (archived) notice.value += `. Из них переизданий старых записей: ${archived} — скрыты из ленты`
+    if (archived) notice.value += `. Переизданий старых записей: ${archived} — скрыты из ленты`
+    const tooOld = results.reduce((sum, r) => sum + r.too_old, 0)
+    if (tooOld) notice.value += `. Старше заданной границы: ${tooOld} — не собирали`
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Сбор не удался'
@@ -188,6 +190,26 @@ async function fetchAll() {
 }
 
 const unprocessed = computed(() => articles.value.filter((a) => !a.post_status).length)
+const unviewed = computed(() => articles.value.filter((a) => !a.is_viewed).length)
+
+const markingRead = ref(false)
+
+/** Отметить все новости просмотренными — отметка личная, чужие не трогаем. */
+async function markAllViewed() {
+  markingRead.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const result = await api.post<{ detail: string }>('/api/articles/mark-all-viewed')
+    notice.value = result.detail
+    // Красим сразу, не дожидаясь перезагрузки списка
+    articles.value.forEach((a) => (a.is_viewed = true))
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось отметить'
+  } finally {
+    markingRead.value = false
+  }
+}
 
 /** Набор текста в любом месте страницы уводит фокус в поиск. */
 function onGlobalKeydown(event: KeyboardEvent) {
@@ -282,6 +304,14 @@ watch([sourceFilter, statusFilter, includeArchive], load)
         <span class="muted" style="font-size: 13px">
           Показано: {{ articles.length }} · без поста: {{ unprocessed }}
         </span>
+        <button
+          class="ws-btn ws-btn-quiet"
+          :disabled="markingRead || !unviewed"
+          :title="unviewed ? `Отметить просмотренными: ${unviewed}` : 'Непросмотренных нет'"
+          @click="markAllViewed"
+        >
+          {{ markingRead ? 'Отмечаем…' : 'Прочитать все' }}
+        </button>
         <button class="ws-btn ws-btn-primary" :disabled="fetching" @click="fetchAll">
           {{ fetching ? 'Собираем…' : 'Собрать новости' }}
         </button>
