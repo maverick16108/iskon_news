@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import re
 from datetime import datetime
 
 from sqlalchemy import (
@@ -58,10 +59,24 @@ class User(Base):
 # Источники новостей
 # --------------------------------------------------------------------------
 
+_TITLE_NOISE = re.compile(r"[^0-9a-zа-яё]+")
+
+
+def title_key_for(title: str) -> str:
+    """Ключ для сравнения заголовков.
+
+    Убираем регистр, знаки и пробелы: «ISKCON 60th Anniversary — Where It
+    All Began» и «ISKCON 60th anniversary: where it all began» должны дать
+    одну строку, иначе один сюжет с двух сайтов не сойдётся.
+    """
+    return _TITLE_NOISE.sub("", (title or "").casefold())[:512]
+
+
 class SourceKind(str, enum.Enum):
     rss = "rss"          # RSS/Atom-фид
     archive = "archive"  # помесячный архив сайта: список «ARCHIVES» на главной
     html = "html"        # страница со списком ссылок
+    newsletter = "newsletter"  # архив рассылок: выпуск — подборка ссылок на чужие сайты
 
 
 class Source(Base):
@@ -117,6 +132,12 @@ class Article(Base):
 
     url: Mapped[str] = mapped_column(String(1024), unique=True, index=True)
     title: Mapped[str] = mapped_column(String(1024))
+
+    # Заголовок без регистра, знаков и лишних пробелов. По нему ловим
+    # один и тот же сюжет, опубликованный на разных сайтах под своими
+    # адресами: по URL такие пары не сходятся.
+    title_key: Mapped[str | None] = mapped_column(String(512), index=True)
+
     author: Mapped[str | None] = mapped_column(String(255))
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
@@ -143,6 +164,29 @@ class Article(Base):
     def text_for_ai(self) -> str:
         """Текст, который уходит в модель: полный, а если его нет — анонс."""
         return self.content or self.summary or ""
+
+
+class ArticleMention(Base):
+    """Где ещё встретилась эта новость.
+
+    Дайджест ISKCON Connection ссылается прямо на dandavats и iskconnews,
+    поэтому одна и та же новость приходит из нескольких источников. Статью
+    держим одну — ключ по каноническому адресу, — а источники копим здесь.
+    """
+
+    __tablename__ = "article_mentions"
+    __table_args__ = (UniqueConstraint("article_id", "source_id", name="uq_article_mention"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True
+    )
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"), index=True)
+    source: Mapped[Source] = relationship()
+
+    # Адрес, по которому источник на неё сослался: у дайджеста он свой
+    url: Mapped[str | None] = mapped_column(String(1024))
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ArticleView(Base):
