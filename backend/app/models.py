@@ -290,6 +290,21 @@ class ArticleImage(Base):
 # Переработанные посты
 # --------------------------------------------------------------------------
 
+# Месяцы для подписи под постом. Через них, а не через locale: на сервере
+# русская локаль может быть не установлена, а длина строки влияет на лимит.
+_MONTHS_GENITIVE = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+
+def format_news_date(value: datetime | None) -> str:
+    """Дата новости словами: «1 августа 2026»."""
+    if value is None:
+        return ""
+    return f"{value.day} {_MONTHS_GENITIVE[value.month - 1]} {value.year}"
+
+
 class PostStatus(str, enum.Enum):
     draft = "draft"          # создан, ИИ ещё не отработал
     generating = "generating"
@@ -334,8 +349,19 @@ class Post(Base):
     telegram_message_id: Mapped[int | None] = mapped_column(Integer)
     telegram_url: Mapped[str | None] = mapped_column(String(255))
 
+    # Дата исходной новости. Копируем в пост при переработке, а не читаем
+    # из статьи на лету: длина поста считается по этому же полю, и она
+    # не должна меняться из-за чужих правок задним числом.
+    source_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     edited_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     edited_by: Mapped[User | None] = relationship(foreign_keys=[edited_by_id])
+
+    @property
+    def source_line(self) -> str:
+        """Строка подписи: источник и дата новости, если она известна."""
+        date = format_news_date(self.source_date)
+        return f"{self.signature} · {date}" if date else self.signature
 
     @property
     def rendered(self) -> str:
@@ -345,7 +371,7 @@ class Post(Base):
         на одной строке, затем тело, затем двухстрочная подпись.
         """
         head = f"{self.hashtags} **{self.title}**".strip()
-        tail = f"{self.signature}\nНовости ИСККОН t.me/iskconru".strip()
+        tail = f"{self.source_line}\nНовости ИСККОН t.me/iskconru".strip()
         return f"{head}\n\n{self.body.strip()}\n\n{tail}"
 
     @property

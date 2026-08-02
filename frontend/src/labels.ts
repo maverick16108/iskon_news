@@ -95,3 +95,18 @@ export function formatDateShort(value: string | null): string {
     year: 'numeric',
   })
 }
+
+
+// Месяцы для подписи под постом. Формат обязан совпадать с серверным
+// до символа: по этой же строке считается лимит в 1000 знаков.
+const MONTHS_GENITIVE = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+]
+
+/** Дата новости словами: «1 августа 2026». */
+export function formatNewsDate(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  return `${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]} ${date.getFullYear()}`
+}

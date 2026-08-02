@@ -13,7 +13,14 @@ import {
 } from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
 import ToastStack from '@/components/ToastStack.vue'
-import { POST_STATUS_LABELS, POST_STATUS_TONE, QUALITY_LABELS, QUALITY_TONE, formatDate } from '@/labels'
+import {
+  POST_STATUS_LABELS,
+  POST_STATUS_TONE,
+  QUALITY_LABELS,
+  QUALITY_TONE,
+  formatDate,
+  formatNewsDate,
+} from '@/labels'
 
 const route = useRoute()
 const articleId = Number(route.params.id)
@@ -33,9 +40,15 @@ const draft = ref({ hashtags: '', title: '', body: '', signature: '' })
 const post = computed<Post | null>(() => article.value?.post ?? null)
 
 /** Сборка поста повторяет серверную: хэштеги и жирный заголовок одной строкой. */
+/** Подпись под постом: источник и дата новости, если она известна. */
+const sourceLine = computed(() => {
+  const date = formatNewsDate(post.value?.source_date ?? article.value?.published_at ?? null)
+  return date ? `${draft.value.signature} · ${date}` : draft.value.signature
+})
+
 const rendered = computed(() => {
   const head = `${draft.value.hashtags} **${draft.value.title}**`.trim()
-  const tail = `${draft.value.signature}\nНовости ИСККОН t.me/iskconru`.trim()
+  const tail = `${sourceLine.value}\nНовости ИСККОН t.me/iskconru`.trim()
   return `${head}\n\n${draft.value.body.trim()}\n\n${tail}`
 })
 
@@ -700,7 +713,15 @@ onMounted(async () => {
 
             <div class="ws-field">
               <label class="ws-field-label">Подпись источника</label>
-              <input v-model="draft.signature" class="ws-input" placeholder="«ISKCON News» website" />
+              <div>
+                <input v-model="draft.signature" class="ws-input" placeholder="«ISKCON News» website" />
+                <small class="muted">
+                  В посте выйдет: {{ sourceLine }}
+                  <template v-if="!post?.source_date && !article.published_at">
+                    — у новости нет даты, поэтому её не будет
+                  </template>
+                </small>
+              </div>
             </div>
 
             <div class="ws-field">

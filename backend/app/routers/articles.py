@@ -428,6 +428,10 @@ async def rewrite_article(article_id: int, request: Request, db: DbDep, user: Cu
         post = Post(article_id=article.id)
         db.add(post)
 
+    # Дата новости фиксируется в посте при каждой переработке: если статью
+    # перечитали с сайта и дата уточнилась, пост должен её подхватить
+    post.source_date = article.published_at
+
     if post.status is PostStatus.published:
         raise HTTPException(status.HTTP_409_CONFLICT, "Пост уже опубликован, повторная генерация запрещена")
 
@@ -637,7 +641,7 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
             try:
                 if platform.kind is PlatformKind.telegram:
                     text = render_html(
-                        post.hashtags, post.title, post.body, post.signature, channel_line
+                        post.hashtags, post.title, post.body, post.source_line, channel_line
                     )
                     result = await send_post(
                         token=platform.token, channel=channel.chat, text=text, photos=paths
@@ -646,7 +650,7 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
                         sent = result
                 else:
                     text = max_api.render_text(
-                        post.hashtags, post.title, post.body, post.signature, channel_line
+                        post.hashtags, post.title, post.body, post.source_line, channel_line
                     )
                     await max_api.send_post(platform.token, channel.chat, text, image_urls)
 

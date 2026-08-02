@@ -99,6 +99,7 @@ class PostOut(ORMModel):
     created_at: datetime
     updated_at: datetime
     published_at: datetime | None
+    source_date: datetime | None = None
     rendered: str
     char_count: int
     is_within_limit: bool

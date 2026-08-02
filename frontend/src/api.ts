@@ -97,6 +97,8 @@ export interface Post {
   created_at: string
   updated_at: string
   published_at: string | null
+  /** Дата исходной новости, попадает в подпись под постом */
+  source_date: string | null
   rendered: string
   char_count: number
   is_within_limit: boolean
