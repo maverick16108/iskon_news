@@ -23,6 +23,7 @@ import {
   QUALITY_TONE,
   formatDate,
   formatDateShort,
+  formatSince,
 } from '@/labels'
 
 const PAGE_SIZE = 50
@@ -223,22 +224,29 @@ async function loadSchedule() {
   }
 }
 
+// Часы для относительного времени: без них «12 мин назад» застыло бы
+// на значении, посчитанном при загрузке страницы
+const now = ref(Date.now())
+
 const lastRunLabel = computed(() => {
   const row = schedule.value
-  if (!row?.last_run_at) return 'Сборщик ещё не запускался'
-  return `Последний сбор: ${formatDate(row.last_run_at)}`
+  if (!row?.last_run_at) return 'Сбор ещё не шёл'
+  return `Сбор ${formatSince(row.last_run_at, now.value)}`
 })
 
 const lastRunHint = computed(() => {
   const row = schedule.value
   if (!row) return ''
-  const parts = [row.last_result ?? '']
+
+  const parts: string[] = []
+  if (row.last_run_at) parts.push(`Последний сбор: ${formatDate(row.last_run_at)}`)
+  if (row.last_result) parts.push(row.last_result)
   parts.push(
     row.is_enabled
-      ? `Автоматический сбор включён, раз в ${row.interval_minutes} мин.`
-      : 'Автоматический сбор выключен.',
+      ? `Автоматический сбор включён, раз в ${row.interval_minutes} мин`
+      : 'Автоматический сбор выключен',
   )
-  return parts.filter(Boolean).join(' · ')
+  return parts.join(' · ')
 })
 const unviewed = computed(() => articles.value.filter((a) => !a.is_viewed).length)
 
@@ -380,7 +388,10 @@ onMounted(async () => {
   }
   await Promise.all([load(), loadSchedule()])
 
-  pollTimer = setInterval(checkUpdates, POLL_INTERVAL_MS)
+  pollTimer = setInterval(() => {
+    now.value = Date.now()
+    void checkUpdates()
+  }, POLL_INTERVAL_MS)
   // Вернулись на вкладку — проверяем сразу, не дожидаясь тика
   document.addEventListener('visibilitychange', checkUpdates)
 })
@@ -433,17 +444,10 @@ watch([sourceFilter, statusFilter, includeArchive], load)
       </label>
 
       <span class="row-end row">
-        <span class="muted" style="font-size: 13px" :title="lastRunHint">
-          {{ lastRunLabel }}
+        <span class="last-run" :title="lastRunHint">
+          <NavIcon name="clock" />
+          <span>{{ lastRunLabel }}</span>
         </span>
-        <button
-          class="ws-btn ws-btn-quiet"
-          :disabled="markingRead || !unviewed"
-          :title="unviewed ? `Отметить просмотренными: ${unviewed}` : 'Непросмотренных нет'"
-          @click="markAllViewed"
-        >
-          {{ markingRead ? 'Отмечаем…' : 'Прочитать все' }}
-        </button>
         <button class="ws-btn ws-btn-primary" :disabled="fetching" @click="fetchAll">
           {{ fetching ? 'Собираем…' : 'Собрать новости' }}
         </button>
@@ -468,6 +472,18 @@ watch([sourceFilter, statusFilter, includeArchive], load)
     <section class="ws-surface">
       <div class="ws-surface-head">
         <h2 class="ws-surface-title">Лента новостей</h2>
+        <span class="row" style="gap: 10px">
+          <span v-if="unviewed" class="muted" style="font-size: 12px">
+            непросмотренных: {{ unviewed }}
+          </span>
+          <button
+            class="ws-btn ws-btn-quiet ws-control-sm"
+            :disabled="markingRead || !unviewed"
+            @click="markAllViewed"
+          >
+            {{ markingRead ? 'Отмечаем…' : 'Прочитать все' }}
+          </button>
+        </span>
       </div>
 
       <TableSkeleton v-if="loading" :columns="[12, 12, 38, 14, 15, 12, 8]" :rows="10" />

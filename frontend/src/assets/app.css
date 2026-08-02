@@ -1127,6 +1127,27 @@ textarea.ws-input {
 /* Пришла уже несвежей: приглушённый янтарный, мягче чем у повтора —
    это не проблема, а повод взглянуть на дату */
 /* Кнопка «пришло новое»: висит над лентой, не сдвигая её содержимое */
+/* Отметка последнего сбора: спокойная плашка, а не строка текста
+   вперемешку с кнопками */
+.last-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--scheme-border-soft, #e3e9f0);
+  border-radius: 999px;
+  background: var(--scheme-surface-muted, #fbfcfd);
+  color: var(--scheme-text-muted, #7b899b);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.last-run .nav-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .feed-pending {
   position: sticky;
   top: 8px;

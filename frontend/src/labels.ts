@@ -110,3 +110,38 @@ export function formatNewsDate(value: string | null): string {
   const date = new Date(value)
   return `${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]} ${date.getFullYear()}`
 }
+
+
+/** Сколько прошло: «только что», «12 мин назад», «вчера, 10:37». */
+export function formatSince(value: string | null, now: number = Date.now()): string {
+  if (!value) return ''
+
+  const date = new Date(value)
+  const minutes = Math.floor((now - date.getTime()) / 60_000)
+
+  if (minutes < 1) return 'только что'
+  if (minutes < 60) return `${minutes} мин назад`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 6) return `${hours} ${plural(hours, 'час', 'часа', 'часов')} назад`
+
+  // Дальше часов считать бессмысленно: важно уже «сегодня или нет»
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  const today = new Date(now)
+  const isToday = date.toDateString() === today.toDateString()
+  if (isToday) return `сегодня в ${time}`
+
+  const yesterday = new Date(now - 86_400_000)
+  if (date.toDateString() === yesterday.toDateString()) return `вчера в ${time}`
+
+  return `${date.toLocaleDateString('ru-RU')} в ${time}`
+}
+
+function plural(count: number, one: string, few: string, many: string): string {
+  const tens = count % 100
+  const ones = count % 10
+  if (tens > 10 && tens < 20) return many
+  if (ones === 1) return one
+  if (ones >= 2 && ones <= 4) return few
+  return many
+}
