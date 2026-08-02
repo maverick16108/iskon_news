@@ -170,6 +170,12 @@ export interface TelegramState {
   blocked: string[]   // отмечены, но бот там публиковать не может
 }
 
+/** Что появилось в ленте после указанного момента. */
+export interface FeedUpdates {
+  count: number
+  latest: string | null
+}
+
 /** Тот же сюжет в другом источнике. */
 export interface RepeatEntry {
   source: string

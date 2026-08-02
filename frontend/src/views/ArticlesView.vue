@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   api,
   type ArticleListItem,
+  type FeedUpdates,
   type FetchResult,
   type FetchSettings,
   type PostStatus,
@@ -128,6 +129,14 @@ async function load() {
     const page = await api.get<ArticleListItem[]>(`/api/articles?${buildParams(0)}`)
     articles.value = page
     exhausted.value = page.length < PAGE_SIZE
+
+    // Точка отсчёта для слежения — самая свежая из показанных
+    const newest = page.reduce<string | null>(
+      (max, a) => (!max || a.fetched_at > max ? a.fetched_at : max),
+      null,
+    )
+    if (newest) newestSeen.value = newest
+    pendingCount.value = 0
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Не удалось загрузить ленту'
   } finally {
@@ -253,6 +262,64 @@ function staleLabel(days: number): string {
 
 const markingRead = ref(false)
 
+// --- Слежение за новыми новостями ------------------------------------------
+// Постоянное соединение здесь избыточно: новости приходят раз в час,
+// а короткий запрос раз в полминуты почти ничего не стоит.
+const POLL_INTERVAL_MS = 30_000
+
+// Ниже этого от верха считаем, что человек смотрит начало списка,
+// и обновляем молча. Если он ушёл вглубь — обновлять под руками нельзя,
+// поэтому предлагаем кнопкой.
+const TOP_THRESHOLD_PX = 200
+
+const newestSeen = ref<string | null>(null)
+const pendingCount = ref(0)
+let pollTimer: ReturnType<typeof setInterval> | undefined
+
+async function checkUpdates() {
+  // Пока вкладка скрыта или список занят — не дёргаем сервер
+  if (document.visibilityState !== 'visible') return
+  if (loading.value || loadingMore.value || fetching.value) return
+
+  const params = new URLSearchParams()
+  if (newestSeen.value) params.set('since', newestSeen.value)
+  if (includeArchive.value) params.set('include_archive', 'true')
+
+  try {
+    const updates = await api.get<FeedUpdates>(`/api/articles/updates?${params}`)
+
+    if (!newestSeen.value) {
+      newestSeen.value = updates.latest
+      return
+    }
+    if (!updates.count) return
+
+    if (window.scrollY <= TOP_THRESHOLD_PX) {
+      await load()
+    } else {
+      pendingCount.value = updates.count
+    }
+  } catch {
+    // Молчим: это фоновая проверка, ошибку показывать незачем
+  }
+}
+
+/** Показать пришедшее и вернуться к началу списка. */
+async function showPending() {
+  pendingCount.value = 0
+  await load()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function newsWord(count: number) {
+  const tens = count % 100
+  const ones = count % 10
+  if (tens > 10 && tens < 20) return 'новостей'
+  if (ones === 1) return 'новость'
+  if (ones >= 2 && ones <= 4) return 'новости'
+  return 'новостей'
+}
+
 /** Отметить все новости просмотренными — отметка личная, чужие не трогаем. */
 async function markAllViewed() {
   markingRead.value = true
@@ -312,10 +379,16 @@ onMounted(async () => {
     // список источников не критичен для ленты
   }
   await Promise.all([load(), loadSchedule()])
+
+  pollTimer = setInterval(checkUpdates, POLL_INTERVAL_MS)
+  // Вернулись на вкладку — проверяем сразу, не дожидаясь тика
+  document.addEventListener('visibilitychange', checkUpdates)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onGlobalKeydown)
+  document.removeEventListener('visibilitychange', checkUpdates)
+  clearInterval(pollTimer)
   observer?.disconnect()
 })
 
@@ -383,6 +456,14 @@ watch([sourceFilter, statusFilter, includeArchive], load)
       @clear-error="error = ''"
       @clear-notice="notice = ''"
     />
+
+    <!-- Пришло новое, пока человек читал середину списка. Подменять
+         строки под руками нельзя, поэтому предлагаем кнопкой. -->
+    <Transition name="toast">
+      <button v-if="pendingCount" class="feed-pending" type="button" @click="showPending">
+        Пришло {{ pendingCount }} {{ newsWord(pendingCount) }} — показать
+      </button>
+    </Transition>
 
     <section class="ws-surface">
       <div class="ws-surface-head">

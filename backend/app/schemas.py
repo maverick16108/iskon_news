@@ -162,6 +162,13 @@ class ArticleOut(ORMModel):
     content_date: datetime | None = None
 
 
+class FeedUpdates(BaseModel):
+    """Что появилось в ленте после указанного момента."""
+
+    count: int
+    latest: datetime | None
+
+
 class RepeatEntry(BaseModel):
     """Где ещё встречается этот же сюжет."""
 

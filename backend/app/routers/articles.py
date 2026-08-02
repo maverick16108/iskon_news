@@ -43,6 +43,7 @@ from app.schemas import (
     PostOut,
     PostRefine,
     PostUpdate,
+    FeedUpdates,
     RepeatEntry,
 )
 
@@ -233,6 +234,31 @@ async def list_articles(
         )
         for article, source_name, viewed_at in rows
     ]
+
+
+@router.get("/updates", response_model=FeedUpdates)
+async def feed_updates(
+    db: DbDep,
+    user: CurrentUser,
+    since: datetime | None = None,
+    include_archive: bool = False,
+):
+    """Появилось ли что-то новое после указанного момента.
+
+    Нарочно лёгкий запрос: лента опрашивает его раз в полминуты, и считать
+    на каждый опрос повторы и картинки, как в основном списке, незачем.
+    """
+    query = select(func.count(Article.id), func.max(Article.fetched_at))
+    if not include_archive:
+        query = query.where(Article.is_archive.is_(False))
+    if since is not None:
+        query = query.where(Article.fetched_at > since)
+
+    count, latest = (await db.execute(query)).one()
+
+    # Когда спрашивают без точки отсчёта, число новых не имеет смысла:
+    # отдаём только время последней, от него и будут считать дальше
+    return FeedUpdates(count=count if since is not None else 0, latest=latest)
 
 
 @router.post("/mark-all-viewed", response_model=Message)
