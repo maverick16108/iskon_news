@@ -1143,6 +1143,13 @@ textarea.ws-input {
   cursor: default;
 }
 
+/* Приписка «сколько прошло» бледнее самой даты: точное время читают,
+   когда оно нужно, а «час назад» схватывается взглядом */
+.last-run-since {
+  margin-left: 4px;
+  opacity: 0.75;
+}
+
 .last-run .nav-icon {
   width: 14px;
   height: 14px;

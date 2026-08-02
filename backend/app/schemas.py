@@ -163,10 +163,16 @@ class ArticleOut(ORMModel):
 
 
 class FeedUpdates(BaseModel):
-    """Что появилось в ленте после указанного момента."""
+    """Что появилось в ленте после указанного момента.
+
+    Здесь же отдаём время последнего обхода: лента показывает его в шапке,
+    и отдельный запрос ради одной даты был бы лишним.
+    """
 
     count: int
     latest: datetime | None
+    last_run_at: datetime | None = None
+    last_result: str | None = None
 
 
 class RepeatEntry(BaseModel):

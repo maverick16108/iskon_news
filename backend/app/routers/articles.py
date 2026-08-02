@@ -19,6 +19,7 @@ from app.models import (
     ArticleVideo,
     ArticleView,
     ContentQuality,
+    FetchSettings,
     Platform,
     PlatformKind,
     Post,
@@ -255,10 +256,16 @@ async def feed_updates(
         query = query.where(Article.fetched_at > since)
 
     count, latest = (await db.execute(query)).one()
+    schedule = await db.scalar(select(FetchSettings).limit(1))
 
     # Когда спрашивают без точки отсчёта, число новых не имеет смысла:
     # отдаём только время последней, от него и будут считать дальше
-    return FeedUpdates(count=count if since is not None else 0, latest=latest)
+    return FeedUpdates(
+        count=count if since is not None else 0,
+        latest=latest,
+        last_run_at=schedule.last_run_at if schedule else None,
+        last_result=schedule.last_result if schedule else None,
+    )
 
 
 @router.post("/mark-all-viewed", response_model=Message)

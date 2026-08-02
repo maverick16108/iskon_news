@@ -231,7 +231,14 @@ const now = ref(Date.now())
 const lastRunLabel = computed(() => {
   const row = schedule.value
   if (!row?.last_run_at) return 'Сбор ещё не шёл'
-  return `Сбор ${formatSince(row.last_run_at, now.value)}`
+  return `Сбор ${formatDate(row.last_run_at)}`
+})
+
+/** Насколько давно это было — приписка к точному времени. */
+const lastRunSince = computed(() => {
+  const row = schedule.value
+  if (!row?.last_run_at) return ''
+  return formatSince(row.last_run_at, now.value)
 })
 
 const lastRunHint = computed(() => {
@@ -328,6 +335,13 @@ async function checkUpdates() {
 
   try {
     const updates = await api.get<FeedUpdates>(`/api/articles/updates?${params}`)
+
+    // Отметку сбора освежаем на каждом тике: обход мог пройти в фоне
+    // и ничего не принести — время всё равно должно смениться
+    if (schedule.value && updates.last_run_at) {
+      schedule.value.last_run_at = updates.last_run_at
+      schedule.value.last_result = updates.last_result
+    }
 
     if (!newestSeen.value) {
       newestSeen.value = updates.latest
@@ -481,6 +495,7 @@ watch([sourceFilter, statusFilter, includeArchive], load)
         <span class="last-run" :title="lastRunHint">
           <NavIcon name="clock" />
           <span>{{ lastRunLabel }}</span>
+          <span v-if="lastRunSince" class="last-run-since">· {{ lastRunSince }}</span>
         </span>
         <button class="ws-btn ws-btn-primary" :disabled="fetching" @click="fetchAll">
           {{ fetching ? 'Собираем…' : 'Собрать новости' }}

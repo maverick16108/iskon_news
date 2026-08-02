@@ -174,6 +174,9 @@ export interface TelegramState {
 export interface FeedUpdates {
   count: number
   latest: string | null
+  /** Время последнего обхода — лента показывает его в шапке */
+  last_run_at: string | null
+  last_result: string | null
 }
 
 /** Тот же сюжет в другом источнике. */
