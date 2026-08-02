@@ -1148,6 +1148,46 @@ textarea.ws-input {
   height: 14px;
 }
 
+/* Только что подставленная строка: коротко подсвечиваем и мягко
+   раскрываем. Резкое появление посреди списка читается как сбой. */
+@keyframes row-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ws-table tbody tr.is-new {
+  animation: row-appear 260ms ease-out;
+}
+
+/* Подсветка гаснет внутри самой анимации, а не по снятию класса:
+   класс снимается мгновенно, и переход бы не отработал */
+@keyframes row-highlight {
+  0%,
+  45% {
+    background: var(--scheme-accent-soft, #eaf2ff);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.ws-table tbody tr.is-new td {
+  animation: row-highlight 6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-table tbody tr.is-new,
+  .ws-table tbody tr.is-new td {
+    animation: none;
+  }
+}
+
 .feed-pending {
   position: sticky;
   top: 8px;

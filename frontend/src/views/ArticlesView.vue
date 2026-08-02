@@ -284,6 +284,39 @@ const newestSeen = ref<string | null>(null)
 const pendingCount = ref(0)
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
+// Строки, появившиеся только что: подсвечиваем на несколько секунд,
+// чтобы было видно, что именно добавилось
+const justAdded = ref<Set<number>>(new Set())
+let highlightTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Подставляет пришедшее, не перерисовывая список.
+ *
+ * Полная перезагрузка показывала скелетоны и сбрасывала прокрутку —
+ * страница «моргала» на ровном месте. Здесь список остаётся на экране,
+ * а сверху просто добавляются новые строки.
+ */
+async function mergeNewArticles(): Promise<number> {
+  const page = await api.get<ArticleListItem[]>(`/api/articles?${buildParams(0)}`)
+
+  const known = new Set(articles.value.map((a) => a.id))
+  const fresh = page.filter((a) => !known.has(a.id))
+  if (!fresh.length) return 0
+
+  articles.value = [...fresh, ...articles.value]
+
+  justAdded.value = new Set(fresh.map((a) => a.id))
+  clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => (justAdded.value = new Set()), 6000)
+
+  const newest = fresh.reduce<string | null>(
+    (max, a) => (!max || a.fetched_at > max ? a.fetched_at : max),
+    newestSeen.value,
+  )
+  if (newest) newestSeen.value = newest
+
+  return fresh.length
+}
+
 async function checkUpdates() {
   // Пока вкладка скрыта или список занят — не дёргаем сервер
   if (document.visibilityState !== 'visible') return
@@ -303,7 +336,7 @@ async function checkUpdates() {
     if (!updates.count) return
 
     if (window.scrollY <= TOP_THRESHOLD_PX) {
-      await load()
+      await mergeNewArticles()
     } else {
       pendingCount.value = updates.count
     }
@@ -315,7 +348,7 @@ async function checkUpdates() {
 /** Показать пришедшее и вернуться к началу списка. */
 async function showPending() {
   pendingCount.value = 0
-  await load()
+  await mergeNewArticles()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -400,6 +433,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onGlobalKeydown)
   document.removeEventListener('visibilitychange', checkUpdates)
   clearInterval(pollTimer)
+  clearTimeout(highlightTimer)
   observer?.disconnect()
 })
 
@@ -520,7 +554,7 @@ watch([sourceFilter, statusFilter, includeArchive], load)
               v-for="article in articles"
               :key="article.id"
               class="row-link"
-              :class="{ 'is-unread': !article.is_viewed }"
+              :class="{ 'is-unread': !article.is_viewed, 'is-new': justAdded.has(article.id) }"
               :title="article.is_viewed ? `Просмотрено: ${formatDate(article.viewed_at)}` : 'Ещё не просматривали'"
               tabindex="0"
               @click="openArticle(article, $event)"
