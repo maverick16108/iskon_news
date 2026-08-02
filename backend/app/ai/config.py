@@ -69,3 +69,34 @@ async def current() -> LlmConfig:
         model=row.model or settings.openai_model,
         temperature=row.temperature,
     )
+
+
+async def remember_outcome(error: str | None, *, out_of_money: bool = False) -> None:
+    """Запоминает, чем закончилось обращение к модели.
+
+    Баланс счёта OpenAI через API не отдаёт: узнать, что деньги кончились,
+    можно только по отказу. Поэтому храним сам отказ — иначе в настройках
+    подключение выглядело бы исправным, пока кто-нибудь не нажмёт кнопку.
+    """
+    from datetime import datetime, timezone
+
+    from app.db import SessionFactory
+    from app.models import LlmSettings
+
+    async with SessionFactory() as db:
+        row = await db.scalar(select(LlmSettings).limit(1))
+        if row is None:
+            return
+
+        now = datetime.now(timezone.utc)
+        if error is None:
+            row.last_ok_at = now
+            row.last_error = None
+            row.last_error_at = None
+            row.out_of_money = False
+        else:
+            row.last_error = error
+            row.last_error_at = now
+            row.out_of_money = out_of_money
+
+        await db.commit()

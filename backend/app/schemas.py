@@ -239,6 +239,11 @@ class LlmSettingsOut(BaseModel):
     # Сам ключ наружу не отдаём никогда — только признак и последние символы
     api_key_set: bool
     api_key_hint: str | None
+    # Чем закончилось последнее обращение к модели
+    last_ok_at: datetime | None = None
+    last_error: str | None = None
+    last_error_at: datetime | None = None
+    out_of_money: bool = False
     updated_at: datetime
     updated_by: str | None
 

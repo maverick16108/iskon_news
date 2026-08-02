@@ -8,6 +8,24 @@ import type { SelectOption } from '@/components/select'
 import { formatDate } from '@/labels'
 
 const current = ref<LlmSettings | null>(null)
+
+/* Подпись и цвет метки в шапке. Ключ на месте — ещё не значит, что
+   переработка работает: деньги могли кончиться. */
+const stateLabel = computed(() => {
+  const row = current.value
+  if (!row?.api_key_set) return 'Ключа нет'
+  if (row.out_of_money) return 'Кончились средства'
+  if (row.last_error) return 'Последний запрос не прошёл'
+  if (row.last_ok_at) return 'Работает'
+  return 'Ключ задан'
+})
+
+const stateTone = computed(() => {
+  const row = current.value
+  if (!row?.api_key_set || row.out_of_money) return 'critical'
+  if (row.last_error) return 'warning'
+  return 'healthy'
+})
 const models = ref<string[]>([])
 const loading = ref(true)
 const saving = ref(false)
@@ -133,8 +151,10 @@ onMounted(load)
     <section class="ws-surface" style="max-width: 720px">
       <div class="ws-surface-head">
         <h2 class="ws-surface-title">Подключение к языковой модели</h2>
-        <span v-if="current" class="ws-badge" :class="current.api_key_set ? 'healthy' : 'critical'">
-          {{ current.api_key_set ? 'Ключ задан' : 'Ключа нет' }}
+        <!-- Состояние важнее наличия ключа: ключ может быть на месте,
+             а деньги на счёте кончиться, и переработка встанет -->
+        <span v-if="current" class="ws-badge" :class="stateTone">
+          {{ stateLabel }}
         </span>
       </div>
 

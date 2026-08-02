@@ -4,9 +4,10 @@ import logging
 import time
 
 from fastapi import APIRouter, HTTPException, Request, status
-from openai import APIError, AuthenticationError
+from openai import APIError, AuthenticationError, RateLimitError
 
-from app.ai.client import AIError, build_client
+from app.ai.client import AIError, build_client, is_quota_error
+from app.ai.config import remember_outcome
 from app.ai.config import LlmConfig, ensure_row
 from app.deps import DbDep, SuperAdmin, write_audit
 from app.schemas import LlmSettingsOut, LlmSettingsUpdate, LlmTestResult, ModelList
@@ -22,6 +23,10 @@ def _to_out(row) -> LlmSettingsOut:
         temperature=row.temperature,
         api_key_set=bool(row.api_key),
         api_key_hint=row.key_hint,
+        last_ok_at=row.last_ok_at,
+        last_error=row.last_error,
+        last_error_at=row.last_error_at,
+        out_of_money=row.out_of_money,
         updated_at=row.updated_at,
         updated_by=row.updated_by.username if row.updated_by else None,
     )
@@ -90,14 +95,33 @@ async def test_connection(db: DbDep, admin: SuperAdmin):
             max_tokens=10,
         )
     except AIError as exc:
+        await remember_outcome(str(exc), out_of_money=is_quota_error(exc))
         return LlmTestResult(ok=False, message=str(exc))
-    except AuthenticationError:
-        return LlmTestResult(ok=False, message="Ключ не принят: проверьте его и адрес API")
+    except AuthenticationError as exc:
+        сообщение = "Ключ не принят: проверьте его и адрес API"
+        await remember_outcome(сообщение)
+        return LlmTestResult(ok=False, message=сообщение)
+    except RateLimitError as exc:
+        # Здесь же выясняется, что кончились деньги: у обоих случаев
+        # один код ответа, различаются они только типом ошибки в теле
+        if is_quota_error(exc):
+            сообщение = (
+                "На счёте OpenAI закончились средства — переработка "
+                "не работает, пока баланс не пополнят"
+            )
+            await remember_outcome(сообщение, out_of_money=True)
+            return LlmTestResult(ok=False, message=сообщение)
+        сообщение = f"Превышен лимит запросов: {exc}"
+        await remember_outcome(сообщение)
+        return LlmTestResult(ok=False, message=сообщение)
     except APIError as exc:
-        return LlmTestResult(ok=False, message=f"Модель недоступна: {exc}")
+        сообщение = f"Модель недоступна: {exc}"
+        await remember_outcome(сообщение)
+        return LlmTestResult(ok=False, message=сообщение)
 
     elapsed = int((time.perf_counter() - started) * 1000)
     answer = (response.choices[0].message.content or "").strip()
+    await remember_outcome(None)
 
     return LlmTestResult(
         ok=True,

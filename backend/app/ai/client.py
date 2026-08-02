@@ -23,6 +23,19 @@ CHANNEL_LINE = "Новости ИСККОН t.me/iskconru"
 HEAD_RESERVE = 120
 
 
+# У «превышен лимит запросов» и «закончились деньги» один код ответа — 429,
+# и различить их можно только по типу ошибки в теле. Разница существенная:
+# лимит проходит сам через минуту, а деньги сами не появятся.
+QUOTA_MARKERS = ("insufficient_quota", "billing", "exceeded your current quota", "credit balance")
+
+
+def is_quota_error(exc: Exception) -> bool:
+    """Кончились ли средства на счёте, а не просто уперлись в частоту."""
+    text = str(exc).lower()
+    code = getattr(getattr(exc, "body", None), "get", lambda *_: None)("code")
+    return code == "insufficient_quota" or any(m in text for m in QUOTA_MARKERS)
+
+
 class AIError(RuntimeError):
     pass
 
@@ -123,6 +136,11 @@ async def rewrite(article: Article, source: Source) -> Draft:
             temperature=config.temperature,
         )
     except RateLimitError as exc:
+        if is_quota_error(exc):
+            raise AIError(
+                "На счёте OpenAI закончились средства — переработка не работает, "
+                "пока баланс не пополнят"
+            ) from exc
         raise AIError(f"OpenAI: превышен лимит запросов — {exc}") from exc
     except APIError as exc:
         raise AIError(f"OpenAI вернул ошибку: {exc}") from exc
@@ -262,6 +280,11 @@ async def refine(
             temperature=config.temperature,
         )
     except RateLimitError as exc:
+        if is_quota_error(exc):
+            raise AIError(
+                "На счёте OpenAI закончились средства — переработка не работает, "
+                "пока баланс не пополнят"
+            ) from exc
         raise AIError(f"OpenAI: превышен лимит запросов — {exc}") from exc
     except APIError as exc:
         raise AIError(f"OpenAI вернул ошибку: {exc}") from exc

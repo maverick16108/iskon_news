@@ -25,6 +25,7 @@ from app.models import (
     ArticleView,
     BotState,
     BotSubscriber,
+    LlmSettings,
     Post,
     PostStatus,
     Source,
@@ -59,6 +60,7 @@ class FetchSummary:
     by_source: dict[str, int]
     ready_to_publish: int
     unviewed: int
+    out_of_money: bool = False
 
     @property
     def added(self) -> int:
@@ -99,10 +101,15 @@ async def collect_summary(db: AsyncSession, by_source: dict[str, int] | None = N
         select(func.count(Article.id)).where(~Article.id.in_(select(ArticleView.article_id)))
     )
 
+    # О деньгах сообщаем здесь же: собирать новости мы продолжаем, а вот
+    # переработать их не сможем, и узнать об этом лучше сразу
+    llm = await db.scalar(select(LlmSettings).limit(1))
+
     return FetchSummary(
         by_source=by_source or {},
         ready_to_publish=ready or 0,
         unviewed=unviewed or 0,
+        out_of_money=bool(llm and llm.out_of_money),
     )
 
 
@@ -122,6 +129,10 @@ def render_summary(summary: FetchSummary, *, after_fetch: bool) -> str:
 
     lines.append(f"Готовы к публикации: {summary.ready_to_publish}")
     lines.append(f"Не просмотрено: {summary.unviewed}")
+
+    if summary.out_of_money:
+        lines.append("")
+        lines.append("⚠️ На счёте OpenAI закончились средства: новости собираются, но переработать их не получится.")
     lines.append("")
     # Ссылка ведёт в ленту, отсортированную по добавлению: у свежесобранных
     # новостей дата публикации бывает старой, и при сортировке по ней они

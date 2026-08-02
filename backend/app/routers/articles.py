@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
 from app.ai.client import AIError, refine, rewrite, translate_captions
+from app.ai.config import remember_outcome
 from app.deps import CurrentUser, DbDep, write_audit
 from app.models import (
     Article,
@@ -437,7 +438,9 @@ async def rewrite_article(article_id: int, request: Request, db: DbDep, user: Cu
 
     try:
         draft = await rewrite(article, article.source)
+        await remember_outcome(None)
     except AIError as exc:
+        await remember_outcome(str(exc), out_of_money="закончились средства" in str(exc))
         post.status = PostStatus.failed
         post.ai_error = str(exc)
         await db.commit()
@@ -510,7 +513,9 @@ async def refine_post(
 
     try:
         draft = await refine(article, article.source, current, payload.instruction)
+        await remember_outcome(None)
     except AIError as exc:
+        await remember_outcome(str(exc), out_of_money="закончились средства" in str(exc))
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     post.hashtags = draft.hashtags

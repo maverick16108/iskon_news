@@ -245,6 +245,12 @@ export interface LlmSettings {
   temperature: number
   api_key_set: boolean
   api_key_hint: string | null
+  /** Чем закончилось последнее обращение к модели */
+  last_ok_at: string | null
+  last_error: string | null
+  last_error_at: string | null
+  /** На счёте закончились средства */
+  out_of_money: boolean
   updated_at: string
   updated_by: string | null
 }
