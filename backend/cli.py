@@ -4,6 +4,7 @@
     python cli.py createsuperuser          — завести первого суперадминистратора
     python cli.py seed-sources             — добавить источники по умолчанию
     python cli.py fetch                    — обойти активные источники
+    python cli.py sync-prompt              — обновить базовый шаблон промпта из кода
 """
 
 from __future__ import annotations
@@ -281,6 +282,43 @@ async def slow_sync(months: int, issues: int, delay: float, limit: int) -> int:
     return 0
 
 
+async def sync_prompt(force: bool) -> int:
+    """Обновляет базовый шаблон в базе до встроенного в код.
+
+    Шаблон засевается один раз при первом запуске, дальше живёт в базе —
+    правка prompt.py сама на прод не попадает. Эта команда её доносит.
+    Шаблон, который правили руками через интерфейс, не трогаем без --force:
+    иначе чужая работа молча пропадёт.
+    """
+    from app.ai.prompt import DEFAULT_TEMPLATE
+    from app.models import PromptTemplate
+
+    async with SessionFactory() as db:
+        row = await db.scalar(select(PromptTemplate).where(PromptTemplate.is_default.is_(True)))
+        if row is None:
+            print("Шаблона по умолчанию нет — он появится при первом заходе в раздел промптов")
+            return 1
+
+        if row.body == DEFAULT_TEMPLATE:
+            print(f"Шаблон «{row.name}» и так совпадает со встроенным")
+            return 0
+
+        if row.updated_by_id is not None and not force:
+            print(
+                f"Шаблон «{row.name}» правили через интерфейс "
+                f"({row.updated_at:%d.%m.%Y %H:%M}). Перезаписать: --force",
+                file=sys.stderr,
+            )
+            return 1
+
+        was = len(row.body)
+        row.body = DEFAULT_TEMPLATE
+        await db.commit()
+
+    print(f"Шаблон «{row.name}» обновлён: было {was} символов, стало {len(DEFAULT_TEMPLATE)}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Служебные команды проекта")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -301,6 +339,9 @@ def main() -> int:
     slow.add_argument("--delay", type=float, default=8.0, help="пауза между статьями, секунд")
     slow.add_argument("--limit", type=int, default=150, help="сколько статей добавить за проход")
 
+    prompt = sub.add_parser("sync-prompt", help="обновить базовый шаблон промпта из кода")
+    prompt.add_argument("--force", action="store_true", help="перезаписать даже правленый вручную")
+
     args = parser.parse_args()
 
     if args.command == "createsuperuser":
@@ -313,6 +354,8 @@ def main() -> int:
         return asyncio.run(backfill_images(args.limit))
     if args.command == "slow-sync":
         return asyncio.run(slow_sync(args.months, args.issues, args.delay, args.limit))
+    if args.command == "sync-prompt":
+        return asyncio.run(sync_prompt(args.force))
     return 1
 
 
