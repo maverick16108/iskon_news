@@ -155,8 +155,9 @@ export interface ArticleListItem extends Article {
   post_char_count: number | null
   image_count: number
   video_count: number
-  is_viewed: boolean
+  is_viewed: boolean       // открывал кто-нибудь из редакторов, отметка общая
   viewed_at: string | null
+  viewed_by: string | null // кто открыл первым
   repeat_sources: string[]      // другие источники с этим же сюжетом
   repeat_article_ids: number[]  // двойники под своими адресами
   /** Этот же сюжет уже публиковали в другой карточке */

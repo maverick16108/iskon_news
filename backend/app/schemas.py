@@ -200,8 +200,9 @@ class ArticleListItem(ArticleOut):
     post_char_count: int | None
     image_count: int
     video_count: int = 0
-    is_viewed: bool = False          # открывал ли эту новость текущий пользователь
+    is_viewed: bool = False          # открывал ли новость кто-нибудь из редакторов
     viewed_at: datetime | None = None
+    viewed_by: str | None = None     # кто открыл первым
     # Все источники, принёсшие этот сюжет: сам источник статьи, все, кто
     # на неё сослался, и источники статей с таким же заголовком
     repeat_sources: list[str] = []

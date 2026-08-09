@@ -25,6 +25,7 @@ import {
   formatDateShort,
   formatSince,
 } from '@/labels'
+import { useAuthStore } from '@/stores/auth'
 
 const PAGE_SIZE = 50
 
@@ -34,6 +35,7 @@ const PRELOAD_MARGIN_PX = 1500
 
 const router = useRouter()
 const route = useRoute()
+const auth = useAuthStore()
 
 const articles = ref<ArticleListItem[]>([])
 const sources = ref<Source[]>([])
@@ -168,7 +170,11 @@ function openArticle(article: ArticleListItem, event: MouseEvent | KeyboardEvent
   }
 
   // Красим строку сразу: сервер отметит просмотр, но ленту мы уже покидаем
-  article.is_viewed = true
+  if (!article.is_viewed) {
+    article.is_viewed = true
+    article.viewed_at = new Date().toISOString()
+    article.viewed_by = auth.user?.username ?? null
+  }
   router.push(route)
 }
 
@@ -256,6 +262,17 @@ const lastRunHint = computed(() => {
   return parts.join(' · ')
 })
 const unviewed = computed(() => articles.value.filter((a) => !a.is_viewed).length)
+
+/** Подсказка на строке: отметка общая, поэтому важно, кто именно открыл. */
+function viewedHint(article: ArticleListItem): string {
+  if (!article.is_viewed) return 'Ещё никто не открывал'
+  const when = formatDate(article.viewed_at)
+  const who = article.viewed_by
+  if (!who) return `Просмотрено: ${when}`
+  return who === auth.user?.username
+    ? `Вы открыли: ${when}`
+    : `Открыл ${who}: ${when}`
+}
 
 // С какого возраста новость уже не новость. Две недели: недельная задержка
 // у дайджестов — обычное дело, а всё, что старше, редактору стоит видеть.
@@ -384,7 +401,13 @@ async function markAllViewed() {
     const result = await api.post<{ detail: string }>('/api/articles/mark-all-viewed')
     notice.value = result.detail
     // Красим сразу, не дожидаясь перезагрузки списка
-    articles.value.forEach((a) => (a.is_viewed = true))
+    const now = new Date().toISOString()
+    articles.value.forEach((a) => {
+      if (a.is_viewed) return
+      a.is_viewed = true
+      a.viewed_at = now
+      a.viewed_by = auth.user?.username ?? null
+    })
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Не удалось отметить'
   } finally {
@@ -570,7 +593,7 @@ watch([sourceFilter, statusFilter, includeArchive], load)
               :key="article.id"
               class="row-link"
               :class="{ 'is-unread': !article.is_viewed, 'is-new': justAdded.has(article.id) }"
-              :title="article.is_viewed ? `Просмотрено: ${formatDate(article.viewed_at)}` : 'Ещё не просматривали'"
+              :title="viewedHint(article)"
               tabindex="0"
               @click="openArticle(article, $event)"
               @auxclick="openArticle(article, $event)"

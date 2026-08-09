@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, literal, select
+from sqlalchemy import func, literal, select, true
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
@@ -26,6 +26,7 @@ from app.models import (
     PostStatus,
     Source,
     TelegramChannel,
+    User,
 )
 from app.parsers.fetch import FetchError, extract_text, fetch_html
 from app.parsers.images import extract_images
@@ -149,17 +150,25 @@ async def list_articles(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
-    # Отметка «просмотрено» своя у каждого редактора, поэтому подтягиваем
-    # её отдельным LEFT JOIN по текущему пользователю, а не полем статьи.
-    seen = ArticleView.__table__.alias("seen")
+    # Отметка «просмотрено» общая на редакцию: открыл один — новость считается
+    # разобранной у всех. Так лента не заставляет двоих читать одно и то же,
+    # и счётчик совпадает с тем, что присылает бот, — у подписчиков бота нет
+    # учётной записи на портале, посчитать им лично всё равно не по чему.
+    # LATERAL, а не JOIN: у статьи может быть несколько отметок, и обычный
+    # JOIN размножил бы строку. Берём первую по времени — кто открыл раньше.
+    seen = (
+        select(ArticleView.viewed_at, User.username)
+        .join(User, User.id == ArticleView.user_id)
+        .where(ArticleView.article_id == Article.id)
+        .order_by(ArticleView.viewed_at)
+        .limit(1)
+        .lateral("seen")
+    )
 
     query = (
-        select(Article, Source.name, seen.c.viewed_at)
+        select(Article, Source.name, seen.c.viewed_at, seen.c.username)
         .join(Source, Source.id == Article.source_id)
-        .outerjoin(
-            seen,
-            (seen.c.article_id == Article.id) & (seen.c.user_id == user.id),
-        )
+        .outerjoin(seen, true())
         .options(
             selectinload(Article.post),
             selectinload(Article.images),
@@ -206,7 +215,7 @@ async def list_articles(
     query = query.order_by(direction.nullslast(), *tiebreak)
 
     rows = (await db.execute(query.limit(limit).offset(offset))).all()
-    repeats = await collect_repeats(db, [article for article, _, _ in rows])
+    repeats = await collect_repeats(db, [article for article, _, _, _ in rows])
 
     return [
         ArticleListItem(
@@ -218,6 +227,7 @@ async def list_articles(
             video_count=len(article.videos),
             is_viewed=viewed_at is not None,
             viewed_at=viewed_at,
+            viewed_by=viewed_by,
             # В ленте хватает списка названий: подробности — в самой новости
             repeat_sources=sorted(
                 {e.source for e in repeats.get(article.id, [])} - {source_name}
@@ -233,7 +243,7 @@ async def list_articles(
                 or any(e.post_status is PostStatus.published for e in repeats.get(article.id, []))
             ),
         )
-        for article, source_name, viewed_at in rows
+        for article, source_name, viewed_at, viewed_by in rows
     ]
 
 
@@ -270,20 +280,19 @@ async def feed_updates(
 
 @router.post("/mark-all-viewed", response_model=Message)
 async def mark_all_viewed(request: Request, db: DbDep, user: CurrentUser):
-    """Отметить все новости просмотренными текущим пользователем.
+    """Отметить просмотренными все новости, которых не открывал никто.
 
-    Отметка личная, чужие не трогаем. Архивные тоже отмечаем: они скрыты
-    из ленты, и если их пропустить, счётчик непросмотренных у бота
-    останется ненулевым при пустой ленте.
+    Отметка общая на редакцию, поэтому пропускаем те, что кто-то уже открыл:
+    иначе в журнале первым читателем окажется тот, кто просто нажал кнопку.
+    Архивные отмечаем тоже: они скрыты из ленты, и если их пропустить,
+    счётчик непросмотренных у бота останется ненулевым при пустой ленте.
     """
     result = await db.execute(
         pg_insert(ArticleView)
         .from_select(
             ["article_id", "user_id"],
             select(Article.id, literal(user.id)).where(
-                ~Article.id.in_(
-                    select(ArticleView.article_id).where(ArticleView.user_id == user.id)
-                )
+                ~Article.id.in_(select(ArticleView.article_id))
             ),
         )
         .on_conflict_do_nothing(constraint="uq_article_view")
