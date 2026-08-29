@@ -16,9 +16,11 @@ log = logging.getLogger(__name__)
 
 API = "https://api.telegram.org"
 
-# Подпись к медиагруппе у Telegram ограничена 1024 символами.
-# Наш лимит поста — 1000, так что вписываемся, но проверяем.
+# Подпись к медиагруппе у Telegram ограничена 1024 символами, а отдельное
+# сообщение — 4096. Обычный пост укладывается в подпись, длинный уходит
+# сообщением под альбомом.
 MAX_CAPTION = 1024
+MAX_MESSAGE = 4096
 MAX_PHOTOS = 10
 TIMEOUT = 60
 
@@ -124,9 +126,9 @@ async def send_post(
     Файлы отправляем сами, а не ссылками: источники закрыты Cloudflare,
     и Telegram, скачивая по ссылке, получил бы 403.
     """
-    if len(text) > MAX_CAPTION:
+    if len(text) > MAX_MESSAGE:
         raise TelegramError(
-            f"В посте {len(text)} символов, Telegram принимает не больше {MAX_CAPTION}"
+            f"В посте {len(text)} символов, Telegram принимает не больше {MAX_MESSAGE}"
         )
 
     photos = [p for p in photos if p.exists()][:MAX_PHOTOS]
@@ -144,14 +146,19 @@ async def send_post(
         )
         return SentPost(result["message_id"], _channel_url(channel, result["message_id"]))
 
+    # Пост длиннее подписи к альбому Telegram просто не примет. Тогда шлём
+    # альбом без подписи, а текст — следующим сообщением: так длинный пост
+    # уходит целиком, а не обрезается на полуслове.
+    caption = text if len(text) <= MAX_CAPTION else None
+
     # Медиагруппа: подпись ставится только у первой фотографии
     media = []
     files = {}
     for index, path in enumerate(photos):
         key = f"photo{index}"
         item = {"type": "photo", "media": f"attach://{key}"}
-        if index == 0:
-            item["caption"] = text
+        if index == 0 and caption is not None:
+            item["caption"] = caption
             item["parse_mode"] = "HTML"
         media.append(item)
         files[key] = (path.name, path.read_bytes())
@@ -167,4 +174,19 @@ async def send_post(
 
     first = result[0] if isinstance(result, list) else result
     message_id = first["message_id"]
+
+    if caption is None:
+        # Ссылку оставляем на альбом: с него пост начинается в ленте канала
+        await _request(
+            token,
+            "sendMessage",
+            data={
+                "chat_id": channel,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": "true",
+                "reply_to_message_id": message_id,
+            },
+        )
+
     return SentPost(message_id, _channel_url(channel, message_id))

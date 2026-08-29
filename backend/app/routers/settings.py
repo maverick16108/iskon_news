@@ -16,6 +16,7 @@ from app.schemas import (
     LlmTestResult,
     ModelList,
     PostLimits,
+    PostLimitsUpdate,
 )
 
 log = logging.getLogger(__name__)
@@ -27,8 +28,6 @@ def _to_out(row) -> LlmSettingsOut:
         base_url=row.base_url,
         model=row.model,
         temperature=row.temperature,
-        post_min_chars=row.post_min_chars,
-        post_max_chars=row.post_max_chars,
         api_key_set=bool(row.api_key),
         api_key_hint=row.key_hint,
         last_ok_at=row.last_ok_at,
@@ -60,17 +59,6 @@ async def update_settings(
     if not changes.get("api_key"):
         changes.pop("api_key", None)
 
-    # Границы могут прийти по одной, поэтому сверяем со значением, которое
-    # получится после правки, а не с присланным. Иначе «поднять минимум»
-    # прошло бы мимо проверки и оставило диапазон вывернутым наизнанку.
-    new_min = changes.get("post_min_chars", row.post_min_chars)
-    new_max = changes.get("post_max_chars", row.post_max_chars)
-    if new_min > new_max:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Нижняя граница длины ({new_min}) больше верхней ({new_max})",
-        )
-
     for field, value in changes.items():
         setattr(row, field, value)
     row.updated_by_id = admin.id
@@ -98,6 +86,37 @@ async def get_post_limits(db: DbDep, user: CurrentUser):
     """Границы длины поста. Открыты любому вошедшему: по ним редактор
     видит счётчик символов и знает, когда публикация не пройдёт."""
     row = await ensure_row(db)
+    await db.commit()
+    await db.refresh(row)
+    return PostLimits(min_chars=row.post_min_chars, max_chars=row.post_max_chars)
+
+
+@router.patch("/post-limits", response_model=PostLimits)
+async def update_post_limits(
+    payload: PostLimitsUpdate, request: Request, db: DbDep, admin: SuperAdmin
+):
+    """Меняет границы длины. Правятся рядом с шаблонами промптов: это
+    требование к тексту, а не к подключению."""
+    if payload.min_chars > payload.max_chars:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Нижняя граница длины ({payload.min_chars}) больше верхней ({payload.max_chars})",
+        )
+
+    row = await ensure_row(db)
+    row.post_min_chars = payload.min_chars
+    row.post_max_chars = payload.max_chars
+    row.updated_by_id = admin.id
+
+    await write_audit(
+        db,
+        user=admin,
+        action="llm.post_limits",
+        entity_type="llm_settings",
+        entity_id=row.id,
+        details={"min_chars": payload.min_chars, "max_chars": payload.max_chars},
+        request=request,
+    )
     await db.commit()
     await db.refresh(row)
     return PostLimits(min_chars=row.post_min_chars, max_chars=row.post_max_chars)

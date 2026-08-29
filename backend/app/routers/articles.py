@@ -10,9 +10,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
 from app.ai.client import AIError, refine, resize, rewrite, translate_captions
-from app.ai.config import post_limits, remember_outcome
+from app.ai.config import remember_outcome
 from app.deps import CurrentUser, DbDep, write_audit
 from app.models import (
+    POST_CHARS_CEILING,
     Article,
     ArticleImage,
     ArticleMention,
@@ -603,16 +604,6 @@ async def resize_post(
     if post.status is PostStatus.published:
         raise HTTPException(status.HTTP_409_CONFLICT, "Опубликованный пост править нельзя")
 
-    # Дальше верхней границы не пускаем: длиннее пост всё равно не опубликовать.
-    # Ниже нижней — можно: редактор вправе сделать короткую заметку короткой,
-    # нижняя граница держит только модель при первой переработке.
-    _, max_chars = await post_limits()
-    if payload.target > max_chars:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Предел длины поста — {max_chars} символов; поднимите его в настройках модели",
-        )
-
     current = {
         "hashtags": post.hashtags.split(),
         "title": post.title,
@@ -687,12 +678,14 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
     if post.status is PostStatus.published:
         raise HTTPException(status.HTTP_409_CONFLICT, "Пост уже опубликован")
 
-    # Предел длины — требование канала, поэтому это ошибка, а не предупреждение
-    _, max_chars = await post_limits()
-    if not post.is_within(max_chars):
+    # Границы из настроек держат модель, а редактор вправе их перешагнуть:
+    # изредка нужен пост длиннее. Публикацию останавливает только предел
+    # площадки — длиннее его сообщение не примет уже Telegram.
+    if not post.is_within(POST_CHARS_CEILING):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"В посте {post.char_count} символов при пределе {max_chars} — сократите текст",
+            f"В посте {post.char_count} символов — Telegram принимает "
+            f"не больше {POST_CHARS_CEILING}, сократите текст",
         )
     if not post.hashtags.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не проставлен хэштег")

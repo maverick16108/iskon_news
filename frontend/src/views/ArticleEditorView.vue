@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import {
@@ -55,16 +55,24 @@ const rendered = computed(() => {
 
 const charCount = computed(() => rendered.value.length)
 
+// Предел Telegram на одно сообщение. Границы из настроек держат модель,
+// а редактору изредка нужен пост длиннее — дальше этого уже нельзя.
+const HARD_LIMIT = 4096
+
+// Подпись к альбому короче: пост длиннее уйдёт отдельным сообщением
+// под фотографиями. Это не ошибка, но редактор должен знать заранее.
+const CAPTION_LIMIT = 1024
+
 const counterClass = computed(() => {
-  if (charCount.value > limits.value.max_chars) return 'over'
-  if (charCount.value > limits.value.max_chars - 100) return 'near'
-  if (charCount.value < limits.value.min_chars) return 'near'
+  if (charCount.value > HARD_LIMIT) return 'over'
+  if (charCount.value > limits.value.max_chars || charCount.value < limits.value.min_chars)
+    return 'near'
   return 'ok'
 })
 
 const canPublish = computed(
   () =>
-    charCount.value <= limits.value.max_chars &&
+    charCount.value <= HARD_LIMIT &&
     draft.value.hashtags.trim().length > 0 &&
     draft.value.title.trim().length > 0 &&
     post.value?.status !== 'published',
@@ -408,8 +416,11 @@ watch(
   { immediate: true },
 )
 
-/** Ползунок ходит от самого короткого поста до верхней границы канала. */
-const sliderMax = computed(() => Math.max(limits.value.max_chars, charCount.value))
+/** Докуда тянется ползунок. Заметно выше рекомендуемого: изредка нужен
+ *  пост на две-три тысячи символов, и до них надо доезжать. */
+const sliderMax = computed(() =>
+  Math.min(HARD_LIMIT, Math.max(2000, limits.value.max_chars * 3, charCount.value + 200)),
+)
 
 function onTargetInput(event: Event) {
   targetMoved.value = true
@@ -425,12 +436,15 @@ const resizeHint = computed(() => {
   return delta < 0 ? `короче на ${-delta}` : `длиннее на ${delta}`
 })
 
-/** Уложится ли задуманное в предел канала. */
-const targetOverLimit = computed(() => targetChars.value > limits.value.max_chars)
+/** Выше рекомендуемого — можно, но стоит сказать об этом вслух. */
+const overRecommended = computed(() => targetChars.value > limits.value.max_chars)
 
-const canResize = computed(
-  () => !!post.value && !resizing.value && resizeDelta.value !== 0 && !targetOverLimit.value,
+/** С фотографиями такой пост уйдёт отдельным сообщением под альбомом. */
+const willSplit = computed(
+  () => targetChars.value > CAPTION_LIMIT && selectedImages.value.length > 0,
 )
+
+const canResize = computed(() => !!post.value && !resizing.value && resizeDelta.value !== 0)
 
 /** Переделать пост под заданную длину — пересобирает модель, а не обрезка. */
 async function resizePost() {
@@ -542,6 +556,19 @@ async function copyImageLinks() {
     error.value = 'Браузер не дал доступ к буферу обмена'
   }
 }
+
+// --- Текст на весь экран ---------------------------------------------------
+// Пост правят целиком, а в поле видно четыре строки: чтобы перечитать
+// написанное, приходится крутить внутреннюю полосу прокрутки.
+
+const bodyFullscreen = ref(false)
+
+function onEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape' && bodyFullscreen.value) bodyFullscreen.value = false
+}
+
+onMounted(() => document.addEventListener('keydown', onEscape))
+onBeforeUnmount(() => document.removeEventListener('keydown', onEscape))
 
 async function loadLimits() {
   try {
@@ -786,7 +813,17 @@ onMounted(async () => {
             </div>
 
             <div class="ws-field">
-              <label class="ws-field-label">Текст поста</label>
+              <label class="ws-field-label">
+                Текст поста
+                <button
+                  class="ws-btn ws-btn-quiet ws-control-sm"
+                  type="button"
+                  title="Открыть текст на весь экран"
+                  @click="bodyFullscreen = true"
+                >
+                  На весь экран
+                </button>
+              </label>
               <textarea v-model="draft.body" class="ws-input"></textarea>
             </div>
 
@@ -819,7 +856,7 @@ onMounted(async () => {
                       Сейчас <b>{{ charCount }}</b>
                     </span>
                     <span class="resizer-arrow" aria-hidden="true">→</span>
-                    <span class="resizer-next" :class="{ 'is-over': targetOverLimit }">
+                    <span class="resizer-next" :class="{ 'is-over': overRecommended }">
                       Станет <b>≈&nbsp;{{ targetChars }}</b>
                       <small>{{ resizeHint }}</small>
                     </span>
@@ -834,9 +871,13 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <small v-if="targetOverLimit" class="range-alert">
-                  {{ targetChars }} больше предела канала ({{ limits.max_chars }}) —
-                  такой пост не опубликовать.
+                <small v-if="overRecommended" class="ws-help">
+                  Выше рекомендуемых {{ limits.max_chars }} — так тоже можно,
+                  предел Telegram {{ HARD_LIMIT }}.
+                  <template v-if="willSplit">
+                    Длиннее {{ CAPTION_LIMIT }} подпись к альбому не вмещает, поэтому
+                    текст уйдёт отдельным сообщением под фотографиями.
+                  </template>
                 </small>
                 <small class="ws-help">
                   Двигайте ползунок и жмите «Пересобрать» — текст заново напишет
@@ -1043,12 +1084,17 @@ onMounted(async () => {
               <div class="post-preview">{{ rendered }}</div>
             </div>
 
-            <p v-if="charCount > limits.max_chars" class="alert alert-error">
-              Превышен предел на {{ charCount - limits.max_chars }} символов — опубликовать нельзя.
+            <p v-if="charCount > HARD_LIMIT" class="alert alert-error">
+              Превышен предел Telegram на {{ charCount - HARD_LIMIT }} символов —
+              такое сообщение не уйдёт.
+            </p>
+            <p v-else-if="charCount > CAPTION_LIMIT && selectedImages.length" class="alert">
+              В посте {{ charCount }} символов — в подпись к альбому ({{ CAPTION_LIMIT }})
+              он не влезет и уйдёт отдельным сообщением под фотографиями.
             </p>
             <p v-else-if="charCount < limits.min_chars" class="alert">
-              Короче нижней границы на {{ limits.min_chars - charCount }} символов.
-              Опубликовать можно, но пост вышел скупым — попробуйте «+ длиннее».
+              Короче рекомендуемых {{ limits.min_chars }} на
+              {{ limits.min_chars - charCount }} символов — пост вышел скупым.
             </p>
 
             <div class="row">
@@ -1098,5 +1144,31 @@ onMounted(async () => {
         </section>
       </div>
     </template>
+
+    <!-- Текст поста на весь экран: правится тут же, а не только читается -->
+    <div v-if="bodyFullscreen" class="fullscreen" @click.self="bodyFullscreen = false">
+      <div class="fullscreen-box">
+        <div class="fullscreen-head">
+          <b>Текст поста</b>
+          <span class="char-counter" :class="counterClass">
+            {{ charCount }} / {{ limits.max_chars }}
+          </span>
+          <button
+            class="ws-btn ws-btn-quiet ws-control-sm fullscreen-close"
+            type="button"
+            @click="bodyFullscreen = false"
+          >
+            Закрыть (Esc)
+          </button>
+        </div>
+        <textarea v-model="draft.body" class="ws-input fullscreen-text"></textarea>
+        <div class="fullscreen-foot">
+          <span class="muted">Правки те же, что и в карточке — не забудьте сохранить.</span>
+          <button class="ws-btn ws-btn-primary" :disabled="saving || !post" @click="save">
+            {{ saving ? 'Сохраняем…' : 'Сохранить' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

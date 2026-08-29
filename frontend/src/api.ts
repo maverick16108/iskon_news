@@ -254,9 +254,6 @@ export interface LlmSettings {
   base_url: string
   model: string
   temperature: number
-  /** Границы длины поста, в которые модель его укладывает */
-  post_min_chars: number
-  post_max_chars: number
   api_key_set: boolean
   api_key_hint: string | null
   /** Чем закончилось последнее обращение к модели */

@@ -847,6 +847,59 @@ body {
   color: var(--scheme-danger, #bd3232);
 }
 
+/* Текст поста на весь экран. Поле в карточке показывает четыре строки,
+   а пост правят целиком — иначе приходится крутить полосу внутри поля. */
+.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(9 21 41 / 45%);
+}
+
+.fullscreen-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(920px, 100%);
+  height: min(760px, 100%);
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--scheme-surface, #fff);
+  box-shadow: 0 24px 60px rgb(15 30 52 / 28%);
+}
+
+.fullscreen-head,
+.fullscreen-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.fullscreen-close {
+  margin-left: auto;
+}
+
+.fullscreen-foot {
+  justify-content: space-between;
+}
+
+.fullscreen-foot .muted {
+  font-size: 11px;
+}
+
+.fullscreen-text {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  line-height: 1.55;
+  font-size: 14px;
+  padding: 12px 14px;
+}
+
 /* Ползунок размера поста. Показывает, сколько символов сейчас и сколько
    станет, — иначе непонятно, что кнопка отдаёт текст на переработку модели,
    а не просто обрезает его. */
@@ -914,9 +967,11 @@ body {
   color: var(--scheme-text-muted, #8b98a9);
 }
 
+/* Выше рекомендуемого — не ошибка, а повод обратить внимание: жёлтым,
+   а не красным. Красное здесь читалось бы как «так нельзя». */
 .resizer-next.is-over b,
 .resizer-next.is-over small {
-  color: var(--scheme-danger, #c0392b);
+  color: var(--scheme-warning, #b8860b);
 }
 
 .resizer-apply {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
-import { api, type PromptTemplate } from '@/api'
+import { FALLBACK_POST_LIMITS, api, type PostLimits, type PromptTemplate } from '@/api'
 import ToastStack from '@/components/ToastStack.vue'
 import { formatDate } from '@/labels'
 
@@ -9,6 +9,57 @@ const prompts = ref<PromptTemplate[]>([])
 const loading = ref(true)
 const error = ref('')
 const notice = ref('')
+
+// --- Длина поста ----------------------------------------------------------
+// Живёт здесь, а не в настройках подключения: это требование к тексту,
+// и в шаблон она подставляется через {min_chars} и {max_chars}.
+
+// Дальше этого не пустит уже Telegram: предел одного сообщения.
+const POST_CHARS_FLOOR = 200
+const POST_CHARS_CEILING = 4096
+
+const limits = ref<PostLimits>({ ...FALLBACK_POST_LIMITS })
+const limitsForm = reactive({ ...FALLBACK_POST_LIMITS })
+const savingLimits = ref(false)
+
+const rangeError = computed(() =>
+  limitsForm.min_chars > limitsForm.max_chars ? 'Нижняя граница больше верхней' : '',
+)
+
+const limitsDirty = computed(
+  () =>
+    limitsForm.min_chars !== limits.value.min_chars ||
+    limitsForm.max_chars !== limits.value.max_chars,
+)
+
+async function loadLimits() {
+  try {
+    limits.value = await api.get<PostLimits>('/api/settings/llm/post-limits')
+    Object.assign(limitsForm, limits.value)
+  } catch {
+    // не критично: список шаблонов важнее
+  }
+}
+
+async function saveLimits() {
+  if (rangeError.value || !limitsDirty.value) return
+
+  savingLimits.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    limits.value = await api.patch<PostLimits>('/api/settings/llm/post-limits', {
+      min_chars: limitsForm.min_chars,
+      max_chars: limitsForm.max_chars,
+    })
+    Object.assign(limitsForm, limits.value)
+    notice.value = `Длина поста: ${limits.value.min_chars}–${limits.value.max_chars} символов`
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось сохранить длину'
+  } finally {
+    savingLimits.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -44,7 +95,10 @@ async function remove(prompt: PromptTemplate) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadLimits()
+})
 </script>
 
 <template>
@@ -64,6 +118,59 @@ onMounted(load)
       @clear-error="error = ''"
       @clear-notice="notice = ''"
     />
+
+    <section class="ws-surface">
+      <div class="ws-surface-head"><h2 class="ws-surface-title">Длина поста</h2></div>
+
+      <div class="ws-surface-body">
+        <div class="ws-field" :class="{ 'is-invalid': !!rangeError }">
+          <label class="ws-field-label">Границы</label>
+          <div>
+            <div class="range-row">
+              <label class="range-input">
+                <span>от</span>
+                <input
+                  v-model.number="limitsForm.min_chars"
+                  class="ws-input"
+                  type="number"
+                  :min="POST_CHARS_FLOOR"
+                  :max="POST_CHARS_CEILING"
+                  step="50"
+                />
+              </label>
+              <label class="range-input">
+                <span>до</span>
+                <input
+                  v-model.number="limitsForm.max_chars"
+                  class="ws-input"
+                  type="number"
+                  :min="POST_CHARS_FLOOR"
+                  :max="POST_CHARS_CEILING"
+                  step="50"
+                />
+              </label>
+              <span class="range-unit">символов</span>
+              <button
+                class="ws-btn ws-btn-primary"
+                type="button"
+                :disabled="savingLimits || !limitsDirty || !!rangeError"
+                @click="saveLimits"
+              >
+                {{ savingLimits ? 'Сохраняем…' : 'Сохранить' }}
+              </button>
+            </div>
+            <small v-if="rangeError" class="range-alert">{{ rangeError }}</small>
+            <small class="ws-help">
+              Подставляются в шаблон вместо <code>{min_chars}</code> и
+              <code>{max_chars}</code>. Считается по всему посту — с хэштегами,
+              заголовком и подписью. Это ориентир для модели: в редакторе длину
+              можно поднять и выше — ползунком «Размер поста». Дальше
+              {{ POST_CHARS_CEILING }} символов не пустит уже Telegram.
+            </small>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section class="ws-surface">
       <div class="ws-surface-head"><h2 class="ws-surface-title">Шаблоны промптов</h2></div>

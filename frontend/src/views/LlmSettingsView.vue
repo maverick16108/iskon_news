@@ -40,20 +40,6 @@ const form = reactive({
   model: '',
   temperature: 0.4,
   api_key: '',
-  post_min_chars: 600,
-  post_max_chars: 1000,
-})
-
-// Верхняя граница — предел Telegram на подпись к альбому: пост почти всегда
-// уходит с фотографиями, а подпись длиннее 1024 символов он не примет.
-const POST_CHARS_FLOOR = 200
-const POST_CHARS_CEILING = 1024
-
-const rangeError = computed(() => {
-  if (form.post_min_chars > form.post_max_chars) {
-    return 'Нижняя граница длины больше верхней'
-  }
-  return ''
 })
 
 const PRESETS: SelectOption[] = [
@@ -73,8 +59,6 @@ const dirty = computed(
     (form.base_url !== current.value.base_url ||
       form.model !== current.value.model ||
       form.temperature !== current.value.temperature ||
-      form.post_min_chars !== current.value.post_min_chars ||
-      form.post_max_chars !== current.value.post_max_chars ||
       form.api_key.length > 0),
 )
 
@@ -85,8 +69,6 @@ async function load() {
     form.base_url = current.value.base_url
     form.model = current.value.model
     form.temperature = current.value.temperature
-    form.post_min_chars = current.value.post_min_chars
-    form.post_max_chars = current.value.post_max_chars
     form.api_key = ''
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Не удалось загрузить настройки'
@@ -96,11 +78,6 @@ async function load() {
 }
 
 async function save() {
-  if (rangeError.value) {
-    error.value = rangeError.value
-    return
-  }
-
   saving.value = true
   error.value = ''
   notice.value = ''
@@ -109,8 +86,6 @@ async function save() {
       base_url: form.base_url,
       model: form.model,
       temperature: form.temperature,
-      post_min_chars: form.post_min_chars,
-      post_max_chars: form.post_max_chars,
     }
     // Пустое поле означает «ключ не меняем»
     if (form.api_key.trim()) payload.api_key = form.api_key.trim()
@@ -287,43 +262,6 @@ onMounted(load)
           </div>
         </div>
 
-        <div class="ws-field" :class="{ 'is-invalid': !!rangeError }">
-          <label class="ws-field-label">Длина поста</label>
-          <div>
-            <div class="range-row">
-              <label class="range-input">
-                <span>от</span>
-                <input
-                  v-model.number="form.post_min_chars"
-                  class="ws-input"
-                  type="number"
-                  :min="POST_CHARS_FLOOR"
-                  :max="POST_CHARS_CEILING"
-                  step="50"
-                />
-              </label>
-              <label class="range-input">
-                <span>до</span>
-                <input
-                  v-model.number="form.post_max_chars"
-                  class="ws-input"
-                  type="number"
-                  :min="POST_CHARS_FLOOR"
-                  :max="POST_CHARS_CEILING"
-                  step="50"
-                />
-              </label>
-              <span class="range-unit">символов</span>
-            </div>
-            <small v-if="rangeError" class="range-alert">{{ rangeError }}</small>
-            <small class="ws-help">
-              Считается по всему посту — с хэштегами, заголовком и подписью.
-              По верхней границе краснеет счётчик в редакторе и запрещается публикация;
-              выше {{ POST_CHARS_CEILING }} её не поднять, столько Telegram берёт
-              в подпись к альбому.
-            </small>
-          </div>
-        </div>
 
         <div class="row">
           <button class="ws-btn ws-btn-primary" type="submit" :disabled="saving || !dirty">

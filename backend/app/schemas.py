@@ -257,8 +257,6 @@ class LlmSettingsOut(BaseModel):
     base_url: str
     model: str
     temperature: float
-    post_min_chars: int
-    post_max_chars: int
     # Сам ключ наружу не отдаём никогда — только признак и последние символы
     api_key_set: bool
     api_key_hint: str | None
@@ -276,21 +274,21 @@ class LlmSettingsUpdate(BaseModel):
     api_key: str | None = Field(default=None, max_length=512)
     model: str | None = Field(default=None, min_length=1, max_length=128)
     temperature: float | None = Field(default=None, ge=0, le=2)
-    # Границы длины поста. Верхнюю ограничиваем пределом Telegram на подпись
-    # к альбому: пост почти всегда уходит с фотографиями.
-    post_min_chars: int | None = Field(
-        default=None, ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING
-    )
-    post_max_chars: int | None = Field(
-        default=None, ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING
-    )
 
 
 class PostLimits(BaseModel):
-    """Границы длины поста для редактора: по ним считается счётчик."""
+    """Границы длины поста. Живут рядом с промптом: это требование к тексту,
+    который пишет модель, а не к подключению."""
 
     min_chars: int
     max_chars: int
+
+
+class PostLimitsUpdate(BaseModel):
+    # Верхнюю границу ограничиваем пределом Telegram на подпись к альбому:
+    # пост почти всегда уходит с фотографиями.
+    min_chars: int = Field(ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING)
+    max_chars: int = Field(ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING)
 
 
 class PostResize(BaseModel):
