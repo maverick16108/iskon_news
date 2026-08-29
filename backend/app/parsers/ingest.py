@@ -28,6 +28,7 @@ from app.models import (
     title_key_for,
 )
 from app.parsers.archived import looks_archived
+from app.parsers.newsworthy import filler_reason
 from app.parsers.fetch import FetchError, extract_text, fetch_html
 from app.parsers.images import extract_images
 from app.parsers.videos import extract_videos
@@ -68,6 +69,7 @@ class IngestResult:
     too_old: int = 0         # старше заданной в настройках границы
     unreachable: int = 0     # источник не отдал страницу, отложены до следующего раза
     repeats: int = 0            # уже были в ленте от другого источника
+    filler: int = 0          # не новости: лекции, курсы, колонки
     skipped_boilerplate: int = 0
     _seen_texts: set[str] = field(default_factory=set, repr=False)
 
@@ -83,6 +85,7 @@ class IngestResult:
             "too_old": self.too_old,
             "unreachable": self.unreachable,
             "repeats": self.repeats,
+            "filler": self.filler,
         }
 
 
@@ -143,6 +146,15 @@ async def ingest(
             and post.published_at < not_older_than
         ):
             result.too_old += 1
+            continue
+
+        # Не новость — лекция, курс, колонка. Отсеиваем до всех запросов:
+        # страницу такого материала качать незачем. Решение принимается по
+        # заголовку и рубрикам, они уже есть в списке публикаций.
+        reason = filler_reason(post.title, categories=post.categories)
+        if reason is not None:
+            log.info("Пропускаем «%s» — %s", post.title.strip()[:80], reason)
+            result.filler += 1
             continue
 
         exists = await session.scalar(select(Article.id).where(Article.url == post.url))
@@ -307,6 +319,9 @@ async def ingest(
     source.last_fetched_at = datetime.now(timezone.utc)
     source.last_error = None
     await session.commit()
+
+    if result.filler:
+        log.info("%s: отсеяно не-новостей: %d", source.name, result.filler)
 
     if result.skipped_boilerplate:
         log.info(

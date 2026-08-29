@@ -3,12 +3,15 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import {
-  MAX_POST_CHARS,
+  CHANNEL_TITLE,
+  FALLBACK_POST_LIMITS,
+  RESIZE_STEP,
   api,
   type ArticleDetail,
   type ArticleImage,
   type ArticleVideo,
   type Post,
+  type PostLimits,
   type TelegramState,
 } from '@/api'
 import NavIcon from '@/components/NavIcon.vue'
@@ -19,7 +22,6 @@ import {
   QUALITY_LABELS,
   QUALITY_TONE,
   formatDate,
-  formatNewsDate,
 } from '@/labels'
 
 const route = useRoute()
@@ -39,30 +41,31 @@ const draft = ref({ hashtags: '', title: '', body: '', signature: '' })
 
 const post = computed<Post | null>(() => article.value?.post ?? null)
 
-/** Сборка поста повторяет серверную: хэштеги и жирный заголовок одной строкой. */
-/** Подпись под постом: источник и дата новости, если она известна. */
-const sourceLine = computed(() => {
-  const date = formatNewsDate(post.value?.source_date ?? article.value?.published_at ?? null)
-  return date ? `${draft.value.signature} · ${date}` : draft.value.signature
-})
+// Границы длины приходят из настроек модели. До ответа сервера считаем
+// по прежнему пределу, чтобы счётчик не мигал пустотой.
+const limits = ref<PostLimits>({ ...FALLBACK_POST_LIMITS })
 
+/** Сборка поста повторяет серверную — по ней же считается длина.
+ *  Подпись: строка источника, ниже название канала жирным. В канал оно
+ *  уходит ссылкой на t.me/iskconru, здесь показываем сам текст. */
 const rendered = computed(() => {
   const head = `${draft.value.hashtags} **${draft.value.title}**`.trim()
-  const tail = `${sourceLine.value}\nНовости ИСККОН t.me/iskconru`.trim()
+  const tail = `${draft.value.signature}\n**${CHANNEL_TITLE}**`.trim()
   return `${head}\n\n${draft.value.body.trim()}\n\n${tail}`
 })
 
 const charCount = computed(() => rendered.value.length)
 
 const counterClass = computed(() => {
-  if (charCount.value > MAX_POST_CHARS) return 'over'
-  if (charCount.value > MAX_POST_CHARS - 100) return 'near'
+  if (charCount.value > limits.value.max_chars) return 'over'
+  if (charCount.value > limits.value.max_chars - 100) return 'near'
+  if (charCount.value < limits.value.min_chars) return 'near'
   return 'ok'
 })
 
 const canPublish = computed(
   () =>
-    charCount.value <= MAX_POST_CHARS &&
+    charCount.value <= limits.value.max_chars &&
     draft.value.hashtags.trim().length > 0 &&
     draft.value.title.trim().length > 0 &&
     post.value?.status !== 'published',
@@ -384,6 +387,50 @@ async function refinePost() {
   }
 }
 
+// --- Размер поста ---------------------------------------------------------
+
+const resizing = ref(0) // в какую сторону идёт пересчёт: -1 короче, 1 длиннее
+
+// Короче предела снизу пост делать можно: нижняя граница держит модель при
+// первой переработке, а редактор вправе оставить короткую новость короткой.
+// Дальше этого предела укорачивать уже нечего.
+const SHORTEST_POST = 200
+
+/** Целевая длина следующего шага. Вверх — до верхней границы, вниз — до предела. */
+function resizeTarget(direction: -1 | 1) {
+  const raw = charCount.value + direction * RESIZE_STEP
+  return direction < 0
+    ? Math.max(SHORTEST_POST, raw)
+    : Math.min(limits.value.max_chars, raw)
+}
+
+/** Упёрлись ли в границу: дальше в эту сторону шага нет. */
+function resizeBlocked(direction: -1 | 1) {
+  return resizeTarget(direction) === charCount.value
+}
+
+/** Переделать пост под другую длину — считает модель, а не обрезка на месте. */
+async function resizePost(direction: -1 | 1) {
+  if (!post.value || resizing.value) return
+
+  const target = resizeTarget(direction)
+  resizing.value = direction
+  error.value = ''
+  notice.value = ''
+  try {
+    const result = await api.post<Post>(`/api/articles/${articleId}/resize`, { target })
+    if (article.value) article.value.post = result
+    syncDraft()
+    notice.value =
+      `${direction < 0 ? 'Сокращено' : 'Дополнено'} до ${result.char_count} символов ` +
+      `(просили около ${target})`
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось изменить размер'
+  } finally {
+    resizing.value = 0
+  }
+}
+
 // --- Свои фотографии ------------------------------------------------------
 
 const dropActive = ref(false)
@@ -472,13 +519,21 @@ async function copyImageLinks() {
   }
 }
 
+async function loadLimits() {
+  try {
+    limits.value = await api.get<PostLimits>('/api/settings/llm/post-limits')
+  } catch {
+    // остаёмся на запасных границах — счётчик всё равно нужен
+  }
+}
+
 onMounted(async () => {
   try {
     allowedTags.value = await api.get<string[]>('/api/hashtags')
   } catch {
     // без подсказок теги можно ввести вручную
   }
-  await Promise.all([load(), loadTelegramState()])
+  await Promise.all([load(), loadTelegramState(), loadLimits()])
 })
 </script>
 
@@ -677,8 +732,28 @@ onMounted(async () => {
         <section class="ws-surface">
           <div class="ws-surface-head">
             <h2 class="ws-surface-title">Пост для канала</h2>
-            <span class="char-counter" :class="counterClass">
-              {{ charCount }} / {{ MAX_POST_CHARS }}
+            <span class="row size-controls">
+              <button
+                class="ws-btn ws-btn-quiet ws-control-sm"
+                type="button"
+                :disabled="!post || !!resizing || resizeBlocked(-1)"
+                :title="`Переработать короче — примерно до ${resizeTarget(-1)} символов`"
+                @click="resizePost(-1)"
+              >
+                {{ resizing === -1 ? '…' : '− короче' }}
+              </button>
+              <span class="char-counter" :class="counterClass">
+                {{ charCount }} / {{ limits.max_chars }}
+              </span>
+              <button
+                class="ws-btn ws-btn-quiet ws-control-sm"
+                type="button"
+                :disabled="!post || !!resizing || resizeBlocked(1)"
+                :title="`Переработать длиннее — примерно до ${resizeTarget(1)} символов`"
+                @click="resizePost(1)"
+              >
+                {{ resizing === 1 ? '…' : '+ длиннее' }}
+              </button>
             </span>
           </div>
 
@@ -716,10 +791,8 @@ onMounted(async () => {
               <div>
                 <input v-model="draft.signature" class="ws-input" placeholder="«ISKCON News» website" />
                 <small class="muted">
-                  В посте выйдет: {{ sourceLine }}
-                  <template v-if="!post?.source_date && !article.published_at">
-                    — у новости нет даты, поэтому её не будет
-                  </template>
+                  В посте выйдет: {{ draft.signature }}, следующей строкой —
+                  «{{ CHANNEL_TITLE }}» жирной ссылкой на канал.
                 </small>
               </div>
             </div>
@@ -895,7 +968,8 @@ onMounted(async () => {
                 </div>
                 <small class="muted">
                   Правка ложится на текущий текст, включая ваши ручные изменения.
-                  Ограничения те же: ничего сверх статьи, теги из списка, лимит 1000 символов.
+                  Ограничения те же: ничего сверх статьи, теги из списка,
+                  предел {{ limits.max_chars }} символов.
                 </small>
               </div>
             </div>
@@ -905,8 +979,12 @@ onMounted(async () => {
               <div class="post-preview">{{ rendered }}</div>
             </div>
 
-            <p v-if="charCount > MAX_POST_CHARS" class="alert alert-error">
-              Превышен лимит на {{ charCount - MAX_POST_CHARS }} символов — опубликовать нельзя.
+            <p v-if="charCount > limits.max_chars" class="alert alert-error">
+              Превышен предел на {{ charCount - limits.max_chars }} символов — опубликовать нельзя.
+            </p>
+            <p v-else-if="charCount < limits.min_chars" class="alert">
+              Короче нижней границы на {{ limits.min_chars - charCount }} символов.
+              Опубликовать можно, но пост вышел скупым — попробуйте «+ длиннее».
             </p>
 
             <div class="row">

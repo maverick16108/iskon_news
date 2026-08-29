@@ -221,6 +221,7 @@ async function fetchOne(source: Source) {
       `${result.source}: записей ${result.entries}, добавлено ${result.added},` +
       ` с полным текстом ${result.with_full_text}` +
       (result.repeats ? `, уже были от других источников ${result.repeats}` : '') +
+      (result.filler ? `, отсеяно не-новостей ${result.filler}` : '') +
       (result.unreachable ? `, не открылись ${result.unreachable} — отложены до следующего обхода` : '')
     await load()
   } catch (e) {

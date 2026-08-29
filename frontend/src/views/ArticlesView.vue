@@ -3,11 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
+  FALLBACK_POST_LIMITS,
   api,
   type ArticleListItem,
   type FeedUpdates,
   type FetchResult,
   type FetchSettings,
+  type PostLimits,
   type PostStatus,
   type Source,
 } from '@/api'
@@ -212,6 +214,8 @@ async function fetchAll() {
     if (archived) notice.value += `. Переизданий старых записей: ${archived} — скрыты из ленты`
     const tooOld = results.reduce((sum, r) => sum + r.too_old, 0)
     if (tooOld) notice.value += `. Старше заданной границы: ${tooOld} — не собирали`
+    const filler = results.reduce((sum, r) => sum + r.filler, 0)
+    if (filler) notice.value += `. Отсеяно не-новостей: ${filler} — лекции, курсы, колонки`
     await Promise.all([load(), loadSchedule()])
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Сбор не удался'
@@ -222,11 +226,22 @@ async function fetchAll() {
 
 const schedule = ref<FetchSettings | null>(null)
 
+// Предел длины поста — по нему в ленте краснеет счётчик символов
+const limits = ref<PostLimits>({ ...FALLBACK_POST_LIMITS })
+
 async function loadSchedule() {
   try {
     schedule.value = await api.get<FetchSettings>('/api/settings/schedule')
   } catch {
     // не критично: лента работает и без этой строки
+  }
+}
+
+async function loadLimits() {
+  try {
+    limits.value = await api.get<PostLimits>('/api/settings/llm/post-limits')
+  } catch {
+    // остаёмся на запасных границах
   }
 }
 
@@ -450,6 +465,8 @@ onMounted(async () => {
     { rootMargin: `${PRELOAD_MARGIN_PX}px` },
   )
   if (sentinel.value) observer.observe(sentinel.value)
+
+  void loadLimits()
 
   try {
     sources.value = await api.get<Source[]>('/api/sources')
@@ -682,7 +699,7 @@ watch([sourceFilter, statusFilter, includeArchive], load)
                 <span
                   v-if="article.post_char_count !== null"
                   class="char-counter"
-                  :class="article.post_char_count > 1000 ? 'over' : 'ok'"
+                  :class="article.post_char_count > limits.max_chars ? 'over' : 'ok'"
                 >
                   {{ article.post_char_count }}
                 </span>

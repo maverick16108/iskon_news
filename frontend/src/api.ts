@@ -101,7 +101,6 @@ export interface Post {
   source_date: string | null
   rendered: string
   char_count: number
-  is_within_limit: boolean
   /** Ссылка на сообщение в канале, если пост туда ушёл */
   telegram_url: string | null
 }
@@ -225,6 +224,8 @@ export interface FetchResult {
   unreachable: number
   /** Уже были в ленте от другого источника */
   repeats: number
+  /** Отсеяно как не-новости: лекции, курсы, колонки */
+  filler: number
 }
 
 export interface PromptTemplate {
@@ -253,6 +254,9 @@ export interface LlmSettings {
   base_url: string
   model: string
   temperature: number
+  /** Границы длины поста, в которые модель его укладывает */
+  post_min_chars: number
+  post_max_chars: number
   api_key_set: boolean
   api_key_hint: string | null
   /** Чем закончилось последнее обращение к модели */
@@ -360,4 +364,18 @@ export interface TelegramInfo {
   webhook_url: string | null
 }
 
-export const MAX_POST_CHARS = 1000
+/** Название канала в подписи. В посте уходит жирной ссылкой на t.me/iskconru,
+ *  здесь — теми же звёздочками, что и на сервере: по этой строке считается длина. */
+export const CHANNEL_TITLE = 'Новости ИСККОН'
+
+/** Границы длины поста. Задаются суперадмином в настройках модели. */
+export interface PostLimits {
+  min_chars: number
+  max_chars: number
+}
+
+/** Пока настройки не загрузились, считаем по прежнему пределу. */
+export const FALLBACK_POST_LIMITS: PostLimits = { min_chars: 600, max_chars: 1000 }
+
+/** На сколько символов меняют длину кнопки «короче» и «длиннее». */
+export const RESIZE_STEP = 100

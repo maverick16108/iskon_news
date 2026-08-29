@@ -6,7 +6,8 @@ Bot API у MAX похож на телеграмный, но отличается
 не загружая файл.
 
 Разметку MAX принимает свою — здесь используем HTML-подобную, ту же, что и
-в Telegram: у нас в посте только жирный заголовок и переносы строк.
+в Telegram: у нас в посте только жирный заголовок, ссылка в подписи
+и переносы строк.
 
 Проверить вживую пока не на чем: бот в MAX заводится только из кабинета
 организации и после модерации. Поэтому здесь всё построено строго по
@@ -19,6 +20,8 @@ import html
 import logging
 
 import httpx
+
+from app.models import CHANNEL_TITLE, CHANNEL_URL
 
 log = logging.getLogger(__name__)
 
@@ -74,11 +77,12 @@ async def check_channel(token: str, chat: str) -> dict:
     }
 
 
-def render_text(hashtags: str, title: str, body: str, signature: str, channel_line: str) -> str:
+def render_text(hashtags: str, title: str, body: str, signature: str) -> str:
     """Тот же формат, что и в Telegram: экранируем всё, потом выделяем заголовок."""
     esc = html.escape
     head = f"{esc(hashtags.strip())} <b>{esc(title.strip())}</b>".strip()
-    tail = f"{esc(signature.strip())}\n{esc(channel_line.strip())}".strip()
+    channel = f'<b><a href="{CHANNEL_URL}">{esc(CHANNEL_TITLE)}</a></b>'
+    tail = f"{esc(signature.strip())}\n{channel}".strip()
     return f"{head}\n\n{esc(body.strip())}\n\n{tail}"
 
 

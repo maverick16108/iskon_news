@@ -9,8 +9,14 @@ from openai import APIError, AuthenticationError, RateLimitError
 from app.ai.client import AIError, build_client, is_quota_error
 from app.ai.config import remember_outcome
 from app.ai.config import LlmConfig, ensure_row
-from app.deps import DbDep, SuperAdmin, write_audit
-from app.schemas import LlmSettingsOut, LlmSettingsUpdate, LlmTestResult, ModelList
+from app.deps import CurrentUser, DbDep, SuperAdmin, write_audit
+from app.schemas import (
+    LlmSettingsOut,
+    LlmSettingsUpdate,
+    LlmTestResult,
+    ModelList,
+    PostLimits,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings/llm", tags=["settings"])
@@ -21,6 +27,8 @@ def _to_out(row) -> LlmSettingsOut:
         base_url=row.base_url,
         model=row.model,
         temperature=row.temperature,
+        post_min_chars=row.post_min_chars,
+        post_max_chars=row.post_max_chars,
         api_key_set=bool(row.api_key),
         api_key_hint=row.key_hint,
         last_ok_at=row.last_ok_at,
@@ -52,6 +60,17 @@ async def update_settings(
     if not changes.get("api_key"):
         changes.pop("api_key", None)
 
+    # Границы могут прийти по одной, поэтому сверяем со значением, которое
+    # получится после правки, а не с присланным. Иначе «поднять минимум»
+    # прошло бы мимо проверки и оставило диапазон вывернутым наизнанку.
+    new_min = changes.get("post_min_chars", row.post_min_chars)
+    new_max = changes.get("post_max_chars", row.post_max_chars)
+    if new_min > new_max:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Нижняя граница длины ({new_min}) больше верхней ({new_max})",
+        )
+
     for field, value in changes.items():
         setattr(row, field, value)
     row.updated_by_id = admin.id
@@ -72,6 +91,16 @@ async def update_settings(
     await db.commit()
     await db.refresh(row)
     return _to_out(row)
+
+
+@router.get("/post-limits", response_model=PostLimits)
+async def get_post_limits(db: DbDep, user: CurrentUser):
+    """Границы длины поста. Открыты любому вошедшему: по ним редактор
+    видит счётчик символов и знает, когда публикация не пройдёт."""
+    row = await ensure_row(db)
+    await db.commit()
+    await db.refresh(row)
+    return PostLimits(min_chars=row.post_min_chars, max_chars=row.post_max_chars)
 
 
 @router.post("/test", response_model=LlmTestResult)

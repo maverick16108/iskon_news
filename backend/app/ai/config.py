@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import SessionFactory
-from app.models import LlmSettings
+from app.models import DEFAULT_MIN_POST_CHARS, MAX_POST_CHARS, LlmSettings
 
 SINGLETON_ID = 1
 
@@ -24,6 +24,10 @@ class LlmConfig:
     api_key: str
     model: str
     temperature: float
+    # В какую длину модель укладывает пост. Считается по всему посту,
+    # вместе с хэштегами, заголовком и подписью.
+    post_min_chars: int = DEFAULT_MIN_POST_CHARS
+    post_max_chars: int = MAX_POST_CHARS
 
 
 async def get_row(db: AsyncSession) -> LlmSettings | None:
@@ -40,6 +44,8 @@ async def ensure_row(db: AsyncSession) -> LlmSettings:
             api_key=settings.openai_api_key or None,
             model=settings.openai_model,
             temperature=0.4,
+            post_min_chars=DEFAULT_MIN_POST_CHARS,
+            post_max_chars=MAX_POST_CHARS,
         )
         db.add(row)
         await db.flush()
@@ -68,7 +74,19 @@ async def current() -> LlmConfig:
         api_key=row.api_key or settings.openai_api_key,
         model=row.model or settings.openai_model,
         temperature=row.temperature,
+        post_min_chars=row.post_min_chars or DEFAULT_MIN_POST_CHARS,
+        post_max_chars=row.post_max_chars or MAX_POST_CHARS,
     )
+
+
+async def post_limits() -> tuple[int, int]:
+    """Границы длины поста из настроек: (минимум, максимум).
+
+    Отдельной функцией, потому что нужны и там, где обращения к модели нет:
+    счётчик в редакторе и запрет публикации считают по ним же.
+    """
+    config = await current()
+    return config.post_min_chars, config.post_max_chars
 
 
 async def remember_outcome(error: str | None, *, out_of_money: bool = False) -> None:

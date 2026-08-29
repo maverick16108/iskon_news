@@ -12,15 +12,17 @@ from app.ai.config import LlmConfig, current as current_config
 from app.ai.hashtags import sanitize_hashtags
 from app.ai.prompt import GLOSSARY, render_system_prompt, build_user_prompt
 from app.config import settings
-from app.models import MAX_POST_CHARS, Article, ContentQuality, Source
+from app.models import CHANNEL_TITLE, Article, ContentQuality, Source, render_post
 
 log = logging.getLogger(__name__)
 
-# Подпись канала — вторая строка, неизменная
-CHANNEL_LINE = "Новости ИСККОН t.me/iskconru"
-
 # Сколько символов резервируем под хэштеги и заголовок, пока их ещё нет
 HEAD_RESERVE = 120
+
+# Насколько пост должен не дотянуть до нижней границы, чтобы просить модель
+# дописать. Отклонение в несколько процентов не стоит лишнего запроса, а
+# главное — лишнего повода что-нибудь присочинить.
+UNDERSHOOT_TOLERANCE = 0.1
 
 
 # У «превышен лимит запросов» и «закончились деньги» один код ответа — 429,
@@ -51,9 +53,7 @@ class Draft:
 
     @property
     def rendered(self) -> str:
-        head = f"{self.hashtags} **{self.title}**".strip()
-        tail = f"{self.signature}\n{CHANNEL_LINE}".strip()
-        return f"{head}\n\n{self.body.strip()}\n\n{tail}"
+        return render_post(self.hashtags, self.title, self.body, self.signature)
 
     @property
     def char_count(self) -> int:
@@ -66,10 +66,20 @@ def build_client(config: LlmConfig) -> AsyncOpenAI:
     return AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
 
-def _body_budget(signature: str) -> int:
-    tail_len = len(signature) + 1 + len(CHANNEL_LINE)
+def _tail_length(signature: str) -> int:
+    """Длина подписи в готовом посте: источник, перевод строки и канал жирным."""
+    return len(signature) + 1 + len(CHANNEL_TITLE) + len("****")
+
+
+def _body_budget(signature: str, max_chars: int) -> int:
+    """Сколько символов остаётся телу поста при верхней границе."""
     # 4 перевода строки между блоками
-    return max(200, MAX_POST_CHARS - HEAD_RESERVE - tail_len - 4)
+    return max(200, max_chars - HEAD_RESERVE - _tail_length(signature) - 4)
+
+
+def _body_floor(signature: str, min_chars: int) -> int:
+    """Сколько символов тело должно набрать, чтобы пост дотянул до нижней границы."""
+    return max(120, min_chars - HEAD_RESERVE - _tail_length(signature) - 4)
 
 
 def _parse_response(content: str) -> tuple[list[str], str, str]:
@@ -103,13 +113,19 @@ async def rewrite(article: Article, source: Source) -> Draft:
     if not text.strip():
         raise AIError("У статьи нет текста для переработки")
 
+    config = await current_config()
+    min_chars, max_chars = config.post_min_chars, config.post_max_chars
+
     signature = source.signature_line
-    budget = _body_budget(signature)
+    budget = _body_budget(signature, max_chars)
 
     user_prompt = build_user_prompt(
         title=article.title,
         text=text,
         body_budget=budget,
+        body_floor=_body_floor(signature, min_chars),
+        min_chars=min_chars,
+        max_chars=max_chars,
         published=article.published_at.strftime("%d.%m.%Y") if article.published_at else None,
         author=article.author,
         is_excerpt=article.content_quality is not ContentQuality.full,
@@ -120,11 +136,13 @@ async def rewrite(article: Article, source: Source) -> Draft:
     template = source.prompt_template.body if source.prompt_template else None
 
     messages = [
-        {"role": "system", "content": render_system_prompt(template)},
+        {
+            "role": "system",
+            "content": render_system_prompt(template, min_chars=min_chars, max_chars=max_chars),
+        },
         {"role": "user", "content": user_prompt},
     ]
 
-    config = await current_config()
     client = build_client(config)
     model = config.model
 
@@ -157,14 +175,7 @@ async def rewrite(article: Article, source: Source) -> Draft:
         model=model,
     )
 
-    # Лимит в 1000 символов — жёсткое требование, поэтому при перерасходе
-    # просим модель сжать текст, а не обрезаем его посередине фразы.
-    if draft.char_count > MAX_POST_CHARS:
-        overflow = draft.char_count - MAX_POST_CHARS
-        log.info("Пост длиннее лимита на %d символов, сокращаем", overflow)
-        draft = await _shorten(client, model, messages, raw, overflow, draft)
-
-    return draft
+    return await _fit_to_range(client, model, messages, raw, draft, min_chars, max_chars)
 
 
 CAPTION_SYSTEM_PROMPT = f"""\
@@ -236,19 +247,28 @@ async def refine(
     хэштеги из списка канала, лимит по длине — поэтому системный промпт
     берём тот же самый.
     """
+    config = await current_config()
+    min_chars, max_chars = config.post_min_chars, config.post_max_chars
+
     signature = source.signature_line
-    budget = _body_budget(signature)
+    budget = _body_budget(signature, max_chars)
 
     template = source.prompt_template.body if source.prompt_template else None
 
     messages = [
-        {"role": "system", "content": render_system_prompt(template)},
+        {
+            "role": "system",
+            "content": render_system_prompt(template, min_chars=min_chars, max_chars=max_chars),
+        },
         {
             "role": "user",
             "content": build_user_prompt(
                 title=article.title,
                 text=article.text_for_ai,
                 body_budget=budget,
+                body_floor=_body_floor(signature, min_chars),
+                min_chars=min_chars,
+                max_chars=max_chars,
                 published=article.published_at.strftime("%d.%m.%Y") if article.published_at else None,
                 author=article.author,
                 is_excerpt=article.content_quality is not ContentQuality.full,
@@ -269,7 +289,6 @@ async def refine(
         },
     ]
 
-    config = await current_config()
     client = build_client(config)
 
     try:
@@ -301,34 +320,25 @@ async def refine(
         model=config.model,
     )
 
-    if draft.char_count > MAX_POST_CHARS:
-        overflow = draft.char_count - MAX_POST_CHARS
-        draft = await _shorten(client, config.model, messages, raw, overflow, draft)
-
-    return draft
+    return await _fit_to_range(client, config.model, messages, raw, draft, min_chars, max_chars)
 
 
-async def _shorten(
+async def _second_pass(
     client: AsyncOpenAI,
     model: str,
     messages: list[dict],
     previous: str,
-    overflow: int,
     draft: Draft,
+    instruction: str,
 ) -> Draft:
-    """Второй проход: та же новость, но короче."""
+    """Ещё один проход по той же новости с дополнительным указанием.
+
+    Прошлый ответ подаём как реплику модели, а не пересобираем разговор:
+    правка тогда ложится на готовый пост, а не пишется с чистого листа.
+    """
     follow_up = messages + [
         {"role": "assistant", "content": previous},
-        {
-            "role": "user",
-            "content": (
-                f"Пост длиннее допустимого на {overflow} символов. "
-                f"Сократи тело поста минимум на {overflow + 40} символов: "
-                "убери второстепенные подробности и повторы, но сохрани все "
-                "ключевые факты, числа, имена и даты. Даты не выбрасывай — "
-                "лучше убрать описание или эпитет. Верни тот же JSON."
-            ),
-        },
+        {"role": "user", "content": instruction},
     ]
 
     try:
@@ -338,13 +348,22 @@ async def _shorten(
             response_format={"type": "json_object"},
             temperature=0.3,
         )
+    except RateLimitError as exc:
+        # Про кончившиеся деньги говорим теми же словами, что и при первой
+        # переработке: по ним роутер узнаёт, что дело в счёте, а не в частоте.
+        if is_quota_error(exc):
+            raise AIError(
+                "На счёте OpenAI закончились средства — переработка не работает, "
+                "пока баланс не пополнят"
+            ) from exc
+        raise AIError(f"OpenAI: превышен лимит запросов — {exc}") from exc
     except APIError as exc:
-        raise AIError(f"OpenAI вернул ошибку при сокращении: {exc}") from exc
+        raise AIError(f"OpenAI вернул ошибку при пересчёте длины: {exc}") from exc
 
     raw = response.choices[0].message.content or ""
     tags, title, body = _parse_response(raw)
 
-    shortened = Draft(
+    return Draft(
         hashtags=" ".join(tags) or draft.hashtags,
         title=title,
         body=body,
@@ -353,9 +372,149 @@ async def _shorten(
         model=model,
     )
 
-    # Если модель и со второй попытки не уложилась — отдаём как есть.
-    # Редактор увидит счётчик и подрежет сам; молча ломать текст не станем.
-    if shortened.char_count > MAX_POST_CHARS:
-        log.warning("После сокращения пост всё ещё %d символов", shortened.char_count)
 
-    return shortened
+def _shorten_instruction(overflow: int) -> str:
+    return (
+        f"Пост длиннее допустимого на {overflow} символов. "
+        f"Сократи тело поста минимум на {overflow + 40} символов: "
+        "убери второстепенные подробности и повторы, но сохрани все "
+        "ключевые факты, числа, имена и даты. Даты не выбрасывай — "
+        "лучше убрать описание или эпитет. Верни тот же JSON."
+    )
+
+
+def _lengthen_instruction(shortfall: int) -> str:
+    return (
+        f"Пост короче нужного на {shortfall} символов. "
+        f"Дополни тело поста примерно на {shortfall + 40} символов, "
+        "используя ТОЛЬКО то, что есть в исходной статье: подробности "
+        "события, числа, имена участников, даты, прямую речь. "
+        "Ничего не выдумывай и не добавляй общих рассуждений, оценок "
+        "и рассказов об ИСККОН вообще. Если в статье добавить больше "
+        "нечего — верни пост без изменений. Верни тот же JSON."
+    )
+
+
+async def _fit_to_range(
+    client: AsyncOpenAI,
+    model: str,
+    messages: list[dict],
+    previous: str,
+    draft: Draft,
+    min_chars: int,
+    max_chars: int,
+) -> Draft:
+    """Подгоняет пост под заданный в настройках диапазон длины.
+
+    Верхняя граница — жёсткая: длиннее пост не примет ни канал, ни проверка
+    при публикации, поэтому просим модель сжать текст, а не режем его
+    посередине фразы.
+
+    Нижнюю соблюдаем мягче. Она нужна, чтобы из большой статьи не вышло
+    три строки, но гнаться за каждым символом здесь вредно: чем настойчивее
+    просишь «подлиннее», тем охотнее модель доливает воду. Поэтому
+    дописываем, только если недобор заметный, и разрешаем вернуть как есть,
+    когда в статье добавить нечего.
+    """
+    if draft.char_count > max_chars:
+        overflow = draft.char_count - max_chars
+        log.info("Пост длиннее предела на %d символов, сокращаем", overflow)
+        result = await _second_pass(
+            client, model, messages, previous, draft, _shorten_instruction(overflow)
+        )
+        # Если модель и со второй попытки не уложилась — отдаём как есть.
+        # Редактор увидит счётчик и подрежет сам; молча ломать текст не станем.
+        if result.char_count > max_chars:
+            log.warning("После сокращения пост всё ещё %d символов", result.char_count)
+        return result
+
+    if draft.char_count < min_chars * (1 - UNDERSHOOT_TOLERANCE):
+        shortfall = min_chars - draft.char_count
+        log.info("Пост короче нижней границы на %d символов, дописываем", shortfall)
+        result = await _second_pass(
+            client, model, messages, previous, draft, _lengthen_instruction(shortfall)
+        )
+        # Просили дописать — а получили перебор: такое бывает, когда в статье
+        # было чем дополнить. Возвращаем более короткий из двух, лишь бы
+        # не вылезти за верхнюю границу.
+        if result.char_count > max_chars:
+            log.info("После дописывания пост вышел за предел — оставляем прежний")
+            return draft
+        return result
+
+    return draft
+
+
+async def resize(article: Article, source: Source, current: dict, target: int) -> Draft:
+    """Переделывает готовый пост под заданную длину.
+
+    Редактор жмёт «короче» или «длиннее», интерфейс присылает нужное число
+    символов — модель переписывает пост под него. Отдельно от «правки по
+    указанию»: там человек говорит, что поменять по смыслу, а здесь смысл
+    остаётся прежним и меняется только объём.
+    """
+    config = await current_config()
+    min_chars, max_chars = config.post_min_chars, config.post_max_chars
+
+    signature = source.signature_line
+    template = source.prompt_template.body if source.prompt_template else None
+
+    messages = [
+        {
+            "role": "system",
+            "content": render_system_prompt(template, min_chars=min_chars, max_chars=max_chars),
+        },
+        {
+            "role": "user",
+            "content": build_user_prompt(
+                title=article.title,
+                text=article.text_for_ai,
+                body_budget=_body_budget(signature, target),
+                body_floor=_body_floor(signature, target),
+                min_chars=min_chars,
+                max_chars=max_chars,
+                published=article.published_at.strftime("%d.%m.%Y") if article.published_at else None,
+                author=article.author,
+                is_excerpt=article.content_quality is not ContentQuality.full,
+            ),
+        },
+    ]
+
+    # Хэштеги роутер отдаёт списком — тем же, что уходит в модель;
+    # для подсчёта длины они нужны строкой.
+    tags = current.get("hashtags", "")
+    tags = " ".join(tags) if isinstance(tags, list) else str(tags)
+
+    previous = json.dumps(current, ensure_ascii=False)
+    length_now = len(
+        render_post(tags, current.get("title", ""), current.get("body", ""), signature)
+    )
+
+    if target < length_now:
+        instruction = (
+            f"Сделай пост короче: сейчас в нём {length_now} символов, нужно "
+            f"около {target}. Убирай второстепенные подробности, повторы и "
+            "эпитеты, но сохрани все ключевые факты, числа, имена и даты. "
+            "Смысл и тему не меняй. Верни тот же JSON."
+        )
+    else:
+        instruction = (
+            f"Сделай пост длиннее: сейчас в нём {length_now} символов, нужно "
+            f"около {target}. Дополняй ТОЛЬКО тем, что есть в исходной статье: "
+            "подробностями события, числами, именами, датами, прямой речью. "
+            "Ничего не выдумывай, не добавляй общих рассуждений и оценок. "
+            "Смысл и тему не меняй. Верни тот же JSON."
+        )
+
+    client = build_client(config)
+
+    draft = Draft(
+        hashtags=tags,
+        title=current.get("title", ""),
+        body=current.get("body", ""),
+        signature=signature,
+        raw=previous,
+        model=config.model,
+    )
+
+    return await _second_pass(client, config.model, messages, previous, draft, instruction)

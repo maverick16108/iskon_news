@@ -290,21 +290,6 @@ class ArticleImage(Base):
 # Переработанные посты
 # --------------------------------------------------------------------------
 
-# Месяцы для подписи под постом. Через них, а не через locale: на сервере
-# русская локаль может быть не установлена, а длина строки влияет на лимит.
-_MONTHS_GENITIVE = (
-    "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря",
-)
-
-
-def format_news_date(value: datetime | None) -> str:
-    """Дата новости словами: «1 августа 2026»."""
-    if value is None:
-        return ""
-    return f"{value.day} {_MONTHS_GENITIVE[value.month - 1]} {value.year}"
-
-
 class PostStatus(str, enum.Enum):
     draft = "draft"          # создан, ИИ ещё не отработал
     generating = "generating"
@@ -314,7 +299,41 @@ class PostStatus(str, enum.Enum):
     failed = "failed"
 
 
+# Длина поста по умолчанию, пока в настройках ничего не задано.
 MAX_POST_CHARS = 1000
+DEFAULT_MIN_POST_CHARS = 600
+
+# Жёсткие границы, за которые настройку не пустим. Верхняя — предел Telegram
+# на подпись к альбому: пост почти всегда уходит с фотографиями, а подпись
+# длиннее 1024 символов Telegram не принимает вовсе.
+POST_CHARS_FLOOR = 200
+POST_CHARS_CEILING = 1024
+
+# Последняя строка поста: название канала ссылкой на него самого. Держим
+# здесь, а не в отправщиках, — строка одна и та же и в предпросмотре
+# редактора, и в Telegram, и в MAX, и расходиться им нельзя.
+CHANNEL_TITLE = "Новости ИСККОН"
+CHANNEL_URL = "https://t.me/iskconru"
+
+
+def render_post(hashtags: str, title: str, body: str, signature: str) -> str:
+    """Пост целиком, как он уйдёт в канал.
+
+    Формат снят с живых постов t.me/iskconru: хэштеги и жирный заголовок
+    на одной строке, затем тело, затем двухстрочная подпись. Вторая строка
+    подписи — название канала жирной ссылкой на него самого; здесь оно
+    размечено звёздочками, в канал уходит настоящей ссылкой.
+
+    Дату новости в подпись не выносим: она и так стоит в первом абзаце,
+    рядом с событием, — этого требует промпт.
+
+    Собирается в одном месте, потому что по этой же строке считается длина:
+    разойдись сборка предпросмотра со сборкой отправки — и счётчик начал бы
+    врать редактору.
+    """
+    head = f"{hashtags} **{title}**".strip()
+    tail = f"{signature}\n**{CHANNEL_TITLE}**".strip()
+    return f"{head}\n\n{body.strip()}\n\n{tail}"
 
 
 class Post(Base):
@@ -349,38 +368,29 @@ class Post(Base):
     telegram_message_id: Mapped[int | None] = mapped_column(Integer)
     telegram_url: Mapped[str | None] = mapped_column(String(255))
 
-    # Дата исходной новости. Копируем в пост при переработке, а не читаем
-    # из статьи на лету: длина поста считается по этому же полю, и она
-    # не должна меняться из-за чужих правок задним числом.
+    # Дата исходной новости на момент переработки. В подпись она не идёт —
+    # модель ставит её в первый абзац, — но остаётся здесь отметкой о том,
+    # с какой датой пост собирали.
     source_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     edited_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     edited_by: Mapped[User | None] = relationship(foreign_keys=[edited_by_id])
 
     @property
-    def source_line(self) -> str:
-        """Строка подписи: источник и дата новости, если она известна."""
-        date = format_news_date(self.source_date)
-        return f"{self.signature} · {date}" if date else self.signature
-
-    @property
     def rendered(self) -> str:
-        """Пост целиком, как он уйдёт в канал.
-
-        Формат снят с живых постов t.me/iskconru: хэштеги и жирный заголовок
-        на одной строке, затем тело, затем двухстрочная подпись.
-        """
-        head = f"{self.hashtags} **{self.title}**".strip()
-        tail = f"{self.source_line}\nНовости ИСККОН t.me/iskconru".strip()
-        return f"{head}\n\n{self.body.strip()}\n\n{tail}"
+        return render_post(self.hashtags, self.title, self.body, self.signature)
 
     @property
     def char_count(self) -> int:
         return len(self.rendered)
 
-    @property
-    def is_within_limit(self) -> bool:
-        return self.char_count <= MAX_POST_CHARS
+    def is_within(self, limit: int = MAX_POST_CHARS) -> bool:
+        """Влезает ли пост в заданный предел.
+
+        Предел приходит из настроек, поэтому это метод, а не свойство:
+        строка настроек лежит в базе, и модель о ней не знает.
+        """
+        return self.char_count <= limit
 
 
 # --------------------------------------------------------------------------
@@ -508,6 +518,13 @@ class LlmSettings(Base):
     api_key: Mapped[str | None] = mapped_column(String(512))
     model: Mapped[str] = mapped_column(String(128), default="gpt-4o")
     temperature: Mapped[float] = mapped_column(Float, default=0.4)
+
+    # В какую длину модель должна уложить пост. Диапазон, а не одно число:
+    # нижняя граница не даёт ей отделаться тремя строками, верхняя — выйти
+    # за предел канала. Считается по всему посту вместе с хэштегами,
+    # заголовком и подписью — то же, что видит редактор в счётчике.
+    post_min_chars: Mapped[int] = mapped_column(Integer, default=DEFAULT_MIN_POST_CHARS)
+    post_max_chars: Mapped[int] = mapped_column(Integer, default=MAX_POST_CHARS)
 
     # Чем закончилось последнее обращение к модели. Баланс счёта OpenAI
     # через API не отдаёт — узнать о деньгах можно только по отказу,

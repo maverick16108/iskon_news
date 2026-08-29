@@ -10,6 +10,8 @@ from pathlib import Path
 
 import httpx
 
+from app.models import CHANNEL_TITLE, CHANNEL_URL
+
 log = logging.getLogger(__name__)
 
 API = "https://api.telegram.org"
@@ -31,17 +33,22 @@ class SentPost:
     url: str
 
 
-def render_html(hashtags: str, title: str, body: str, signature: str, channel_line: str) -> str:
+def render_html(hashtags: str, title: str, body: str, signature: str) -> str:
     """Собирает пост в разметке Telegram.
 
     Экранируем всё как обычный текст и лишь потом оборачиваем заголовок
     в <b>: иначе амперсанд или угловая скобка из статьи сломали бы разбор
     на стороне Telegram, и сообщение не ушло бы.
+
+    Последняя строка — название канала жирной ссылкой на него самого.
+    Адрес в тексте не показываем: у ссылки в счёт длины идёт только
+    видимая часть, и подпись выходит короче.
     """
     esc = html.escape
 
     head = f"{esc(hashtags.strip())} <b>{esc(title.strip())}</b>".strip()
-    tail = f"{esc(signature.strip())}\n{esc(channel_line.strip())}".strip()
+    channel = f'<b><a href="{CHANNEL_URL}">{esc(CHANNEL_TITLE)}</a></b>'
+    tail = f"{esc(signature.strip())}\n{channel}".strip()
     return f"{head}\n\n{esc(body.strip())}\n\n{tail}"
 
 

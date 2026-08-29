@@ -9,8 +9,8 @@ from sqlalchemy import func, literal, select, true
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
-from app.ai.client import AIError, refine, rewrite, translate_captions
-from app.ai.config import remember_outcome
+from app.ai.client import AIError, refine, resize, rewrite, translate_captions
+from app.ai.config import post_limits, remember_outcome
 from app.deps import CurrentUser, DbDep, write_audit
 from app.models import (
     Article,
@@ -44,6 +44,7 @@ from app.schemas import (
     Message,
     PostOut,
     PostRefine,
+    PostResize,
     PostUpdate,
     FeedUpdates,
     RepeatEntry,
@@ -583,6 +584,71 @@ async def refine_post(
     return post
 
 
+@router.post("/{article_id}/resize", response_model=PostOut)
+async def resize_post(
+    article_id: int, payload: PostResize, request: Request, db: DbDep, user: CurrentUser
+):
+    """Переделывает пост под другую длину: редактор нажал «короче» или «длиннее»."""
+    article = await db.scalar(
+        select(Article)
+        .where(Article.id == article_id)
+        .options(selectinload(Article.post), selectinload(Article.source))
+    )
+    if article is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Статья не найдена")
+
+    post = article.post
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пост ещё не создан")
+    if post.status is PostStatus.published:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Опубликованный пост править нельзя")
+
+    # Дальше верхней границы не пускаем: длиннее пост всё равно не опубликовать.
+    # Ниже нижней — можно: редактор вправе сделать короткую заметку короткой,
+    # нижняя граница держит только модель при первой переработке.
+    _, max_chars = await post_limits()
+    if payload.target > max_chars:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Предел длины поста — {max_chars} символов; поднимите его в настройках модели",
+        )
+
+    current = {
+        "hashtags": post.hashtags.split(),
+        "title": post.title,
+        "body": post.body,
+    }
+
+    try:
+        draft = await resize(article, article.source, current, payload.target)
+        await remember_outcome(None)
+    except AIError as exc:
+        await remember_outcome(str(exc), out_of_money="закончились средства" in str(exc))
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    post.hashtags = draft.hashtags
+    post.title = draft.title
+    post.body = draft.body
+    post.ai_raw_output = draft.raw
+    post.ai_model = draft.model
+    post.ai_error = None
+    post.status = PostStatus.edited
+    post.edited_by_id = user.id
+
+    await write_audit(
+        db,
+        user=user,
+        action="post.resize",
+        entity_type="article",
+        entity_id=article_id,
+        details={"target": payload.target, "chars": post.char_count},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(post)
+    return post
+
+
 @router.patch("/{article_id}/post", response_model=PostOut)
 async def update_post(
     article_id: int, payload: PostUpdate, request: Request, db: DbDep, user: CurrentUser
@@ -621,11 +687,12 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
     if post.status is PostStatus.published:
         raise HTTPException(status.HTTP_409_CONFLICT, "Пост уже опубликован")
 
-    # Лимит в 1000 символов — требование канала, поэтому это ошибка, а не предупреждение
-    if not post.is_within_limit:
+    # Предел длины — требование канала, поэтому это ошибка, а не предупреждение
+    _, max_chars = await post_limits()
+    if not post.is_within(max_chars):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"В посте {post.char_count} символов при лимите 1000 — сократите текст",
+            f"В посте {post.char_count} символов при пределе {max_chars} — сократите текст",
         )
     if not post.hashtags.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не проставлен хэштег")
@@ -680,16 +747,12 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
             except FetchError as exc:
                 log.warning("Фото %s не удалось подготовить: %s", image.id, exc)
 
-        channel_line = "Новости ИСККОН t.me/iskconru"
-
         # Если первая же отправка не удалась — не публикуем никуда, чтобы
         # пост не остался разосланным наполовину
         for index, (platform, channel) in enumerate(targets):
             try:
                 if platform.kind is PlatformKind.telegram:
-                    text = render_html(
-                        post.hashtags, post.title, post.body, post.source_line, channel_line
-                    )
+                    text = render_html(post.hashtags, post.title, post.body, post.signature)
                     result = await send_post(
                         token=platform.token, channel=channel.chat, text=text, photos=paths
                     )
@@ -697,7 +760,7 @@ async def publish_post(article_id: int, request: Request, db: DbDep, user: Curre
                         sent = result
                 else:
                     text = max_api.render_text(
-                        post.hashtags, post.title, post.body, post.source_line, channel_line
+                        post.hashtags, post.title, post.body, post.signature
                     )
                     await max_api.send_post(platform.token, channel.chat, text, image_urls)
 
