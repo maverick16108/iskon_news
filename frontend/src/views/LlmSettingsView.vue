@@ -287,36 +287,40 @@ onMounted(load)
           </div>
         </div>
 
-        <div class="ws-field">
-          <label class="ws-field-label">Длина поста, символов</label>
+        <div class="ws-field" :class="{ 'is-invalid': !!rangeError }">
+          <label class="ws-field-label">Длина поста</label>
           <div>
-            <div class="row">
-              <input
-                v-model.number="form.post_min_chars"
-                class="ws-input"
-                type="number"
-                :min="POST_CHARS_FLOOR"
-                :max="POST_CHARS_CEILING"
-                step="50"
-                style="min-width: 110px"
-              />
-              <span class="muted">—</span>
-              <input
-                v-model.number="form.post_max_chars"
-                class="ws-input"
-                type="number"
-                :min="POST_CHARS_FLOOR"
-                :max="POST_CHARS_CEILING"
-                step="50"
-                style="min-width: 110px"
-              />
+            <div class="range-row">
+              <label class="range-input">
+                <span>от</span>
+                <input
+                  v-model.number="form.post_min_chars"
+                  class="ws-input"
+                  type="number"
+                  :min="POST_CHARS_FLOOR"
+                  :max="POST_CHARS_CEILING"
+                  step="50"
+                />
+              </label>
+              <label class="range-input">
+                <span>до</span>
+                <input
+                  v-model.number="form.post_max_chars"
+                  class="ws-input"
+                  type="number"
+                  :min="POST_CHARS_FLOOR"
+                  :max="POST_CHARS_CEILING"
+                  step="50"
+                />
+              </label>
+              <span class="range-unit">символов</span>
             </div>
-            <small v-if="rangeError" class="alert alert-error">{{ rangeError }}</small>
-            <small v-else class="muted">
-              В эти границы модель укладывает пост целиком — вместе с хэштегами,
-              заголовком и подписью. По верхней границе считается счётчик в редакторе
-              и запрет публикации. Выше {{ POST_CHARS_CEILING }} поднимать нельзя:
-              столько символов Telegram принимает в подписи к альбому с фотографиями.
+            <small v-if="rangeError" class="range-alert">{{ rangeError }}</small>
+            <small class="ws-help">
+              Считается по всему посту — с хэштегами, заголовком и подписью.
+              По верхней границе краснеет счётчик в редакторе и запрещается публикация;
+              выше {{ POST_CHARS_CEILING }} её не поднять, столько Telegram берёт
+              в подпись к альбому.
             </small>
           </div>
         </div>

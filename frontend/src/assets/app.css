@@ -809,16 +809,118 @@ body {
   color: var(--scheme-success, #2c6b45);
 }
 
-/* Счётчик с кнопками «короче»/«длиннее» по бокам. Ширина у счётчика
-   фиксированная: без неё кнопки прыгают, когда меняется число символов. */
-.size-controls {
+/* Диапазон «от … до …». Поля с явной шириной: в форме настроек
+   .ws-input растянут на всю строку, и два таких поля переносятся друг
+   под друга вместо того, чтобы встать рядом. */
+.range-row {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.size-controls .char-counter {
-  min-width: 86px;
-  text-align: center;
+.range-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--scheme-text-muted, #74859b);
+}
+
+.ws-field .range-input .ws-input {
+  width: 96px;
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-unit {
+  font-size: 12px;
+  color: var(--scheme-text-muted, #74859b);
+}
+
+.range-alert {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--scheme-danger, #bd3232);
+}
+
+/* Ползунок размера поста. Показывает, сколько символов сейчас и сколько
+   станет, — иначе непонятно, что кнопка отдаёт текст на переработку модели,
+   а не просто обрезает его. */
+.resizer {
+  padding: 12px 14px;
+  border: 1px solid var(--scheme-border, #e3e9f0);
+  border-radius: 9px;
+  background: var(--scheme-surface-muted, #fbfcfd);
+}
+
+.resizer.is-busy {
+  opacity: 0.7;
+}
+
+.resizer-scale {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--scheme-text-muted, #8b98a9);
+  font-variant-numeric: tabular-nums;
+}
+
+.resizer-band {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--scheme-accent-soft, #eaf2ff);
+  color: var(--scheme-accent, #1768ff);
+  font-weight: 650;
+}
+
+.resizer-slider {
+  width: 100%;
+  margin: 8px 0 10px;
+  accent-color: var(--scheme-accent, #1768ff);
+  cursor: pointer;
+}
+
+.resizer-slider:disabled {
+  cursor: not-allowed;
+}
+
+.resizer-readout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--scheme-text-muted, #74859b);
+}
+
+.resizer-readout b {
+  color: var(--scheme-text, #18304e);
+  font-variant-numeric: tabular-nums;
+}
+
+.resizer-arrow {
+  color: var(--scheme-text-muted, #a6b2c2);
+}
+
+.resizer-next small {
+  display: block;
+  font-size: 10px;
+  color: var(--scheme-text-muted, #8b98a9);
+}
+
+.resizer-next.is-over b,
+.resizer-next.is-over small {
+  color: var(--scheme-danger, #c0392b);
+}
+
+.resizer-apply {
+  margin-left: auto;
 }
 
 /* Своего потолка у текста нет: высотой распоряжается карточка, она же
@@ -875,6 +977,13 @@ textarea.ws-input {
   outline-offset: 1px;
 }
 
+/* Обёртка миниатюры: к ней крепятся значки, поэтому они не съезжают
+   на подпись, когда та занимает две строки. */
+.gallery-media {
+  position: relative;
+  display: block;
+}
+
 .gallery-thumb {
   width: 100%;
   aspect-ratio: 4 / 3;
@@ -897,10 +1006,13 @@ textarea.ws-input {
   color: var(--scheme-text-muted, #8b98a9);
 }
 
+/* Значки на миниатюре разведены по углам: звезда «главная» слева сверху,
+   галочка выбора справа сверху, крестик «убрать» — снизу справа. Раньше
+   звезда и крестик стояли в одном углу и налезали друг на друга. */
 .gallery-mark {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 6px;
+  right: 6px;
   width: 20px;
   height: 20px;
   display: grid;
@@ -914,10 +1026,11 @@ textarea.ws-input {
 
 .gallery-remove {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 20px;
-  height: 20px;
+  bottom: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
   border: 0;

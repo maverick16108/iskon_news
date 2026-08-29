@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import {
   CHANNEL_TITLE,
   FALLBACK_POST_LIMITS,
-  RESIZE_STEP,
   api,
   type ArticleDetail,
   type ArticleImage,
@@ -389,45 +388,70 @@ async function refinePost() {
 
 // --- Размер поста ---------------------------------------------------------
 
-const resizing = ref(0) // в какую сторону идёт пересчёт: -1 короче, 1 длиннее
+const resizing = ref(false)
 
-// Короче предела снизу пост делать можно: нижняя граница держит модель при
-// первой переработке, а редактор вправе оставить короткую новость короткой.
-// Дальше этого предела укорачивать уже нечего.
+// Короче этого пост делать нечего. Ниже нижней границы канала опускаться
+// можно: она держит модель при первой переработке, а редактор вправе
+// оставить короткую новость короткой.
 const SHORTEST_POST = 200
 
-/** Целевая длина следующего шага. Вверх — до верхней границы, вниз — до предела. */
-function resizeTarget(direction: -1 | 1) {
-  const raw = charCount.value + direction * RESIZE_STEP
-  return direction < 0
-    ? Math.max(SHORTEST_POST, raw)
-    : Math.min(limits.value.max_chars, raw)
+// Какой длины должен получиться пост. Пока ползунок не трогали, он стоит
+// на текущей длине — так видно, что менять ничего и не просили.
+const targetChars = ref(0)
+const targetMoved = ref(false)
+
+watch(
+  charCount,
+  (value) => {
+    if (!targetMoved.value) targetChars.value = value
+  },
+  { immediate: true },
+)
+
+/** Ползунок ходит от самого короткого поста до верхней границы канала. */
+const sliderMax = computed(() => Math.max(limits.value.max_chars, charCount.value))
+
+function onTargetInput(event: Event) {
+  targetMoved.value = true
+  targetChars.value = Number((event.target as HTMLInputElement).value)
 }
 
-/** Упёрлись ли в границу: дальше в эту сторону шага нет. */
-function resizeBlocked(direction: -1 | 1) {
-  return resizeTarget(direction) === charCount.value
-}
+/** На сколько символов просим изменить пост. */
+const resizeDelta = computed(() => targetChars.value - charCount.value)
 
-/** Переделать пост под другую длину — считает модель, а не обрезка на месте. */
-async function resizePost(direction: -1 | 1) {
-  if (!post.value || resizing.value) return
+const resizeHint = computed(() => {
+  const delta = resizeDelta.value
+  if (!delta) return 'столько же — подвиньте ползунок'
+  return delta < 0 ? `короче на ${-delta}` : `длиннее на ${delta}`
+})
 
-  const target = resizeTarget(direction)
-  resizing.value = direction
+/** Уложится ли задуманное в предел канала. */
+const targetOverLimit = computed(() => targetChars.value > limits.value.max_chars)
+
+const canResize = computed(
+  () => !!post.value && !resizing.value && resizeDelta.value !== 0 && !targetOverLimit.value,
+)
+
+/** Переделать пост под заданную длину — пересобирает модель, а не обрезка. */
+async function resizePost() {
+  if (!canResize.value) return
+
+  const target = targetChars.value
+  resizing.value = true
   error.value = ''
   notice.value = ''
   try {
     const result = await api.post<Post>(`/api/articles/${articleId}/resize`, { target })
     if (article.value) article.value.post = result
     syncDraft()
-    notice.value =
-      `${direction < 0 ? 'Сокращено' : 'Дополнено'} до ${result.char_count} символов ` +
-      `(просили около ${target})`
+    // Ползунок отпускаем: он снова встанет на новую длину поста
+    targetMoved.value = false
+    targetChars.value = result.char_count
+    notice.value = `Пост пересобран: ${result.char_count} символов (просили около ${target})`
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось изменить размер'
+    error.value = e instanceof Error ? e.message : 'Не удалось пересобрать пост'
   } finally {
-    resizing.value = 0
+    resizing.value = false
   }
 }
 
@@ -732,28 +756,8 @@ onMounted(async () => {
         <section class="ws-surface">
           <div class="ws-surface-head">
             <h2 class="ws-surface-title">Пост для канала</h2>
-            <span class="row size-controls">
-              <button
-                class="ws-btn ws-btn-quiet ws-control-sm"
-                type="button"
-                :disabled="!post || !!resizing || resizeBlocked(-1)"
-                :title="`Переработать короче — примерно до ${resizeTarget(-1)} символов`"
-                @click="resizePost(-1)"
-              >
-                {{ resizing === -1 ? '…' : '− короче' }}
-              </button>
-              <span class="char-counter" :class="counterClass">
-                {{ charCount }} / {{ limits.max_chars }}
-              </span>
-              <button
-                class="ws-btn ws-btn-quiet ws-control-sm"
-                type="button"
-                :disabled="!post || !!resizing || resizeBlocked(1)"
-                :title="`Переработать длиннее — примерно до ${resizeTarget(1)} символов`"
-                @click="resizePost(1)"
-              >
-                {{ resizing === 1 ? '…' : '+ длиннее' }}
-              </button>
+            <span class="char-counter" :class="counterClass">
+              {{ charCount }} / {{ limits.max_chars }}
             </span>
           </div>
 
@@ -784,6 +788,62 @@ onMounted(async () => {
             <div class="ws-field">
               <label class="ws-field-label">Текст поста</label>
               <textarea v-model="draft.body" class="ws-input"></textarea>
+            </div>
+
+            <div class="ws-field">
+              <label class="ws-field-label">Размер поста</label>
+              <div>
+                <div class="resizer" :class="{ 'is-busy': resizing }">
+                  <div class="resizer-scale">
+                    <span>{{ SHORTEST_POST }}</span>
+                    <span class="resizer-band">
+                      рекомендуемые {{ limits.min_chars }}–{{ limits.max_chars }}
+                    </span>
+                    <span>{{ sliderMax }}</span>
+                  </div>
+
+                  <input
+                    class="resizer-slider"
+                    type="range"
+                    :min="SHORTEST_POST"
+                    :max="sliderMax"
+                    step="10"
+                    :value="targetChars"
+                    :disabled="!post || resizing"
+                    aria-label="Нужная длина поста"
+                    @input="onTargetInput"
+                  />
+
+                  <div class="resizer-readout">
+                    <span class="resizer-now">
+                      Сейчас <b>{{ charCount }}</b>
+                    </span>
+                    <span class="resizer-arrow" aria-hidden="true">→</span>
+                    <span class="resizer-next" :class="{ 'is-over': targetOverLimit }">
+                      Станет <b>≈&nbsp;{{ targetChars }}</b>
+                      <small>{{ resizeHint }}</small>
+                    </span>
+                    <button
+                      class="ws-btn ws-btn-primary resizer-apply"
+                      type="button"
+                      :disabled="!canResize"
+                      @click="resizePost"
+                    >
+                      {{ resizing ? 'Пересобираем…' : 'Пересобрать' }}
+                    </button>
+                  </div>
+                </div>
+
+                <small v-if="targetOverLimit" class="range-alert">
+                  {{ targetChars }} больше предела канала ({{ limits.max_chars }}) —
+                  такой пост не опубликовать.
+                </small>
+                <small class="ws-help">
+                  Двигайте ползунок и жмите «Пересобрать» — текст заново напишет
+                  модель по исходной статье, вручную ничего не обрезается.
+                  Модель берёт сохранённый пост, поэтому свои правки сохраните заранее.
+                </small>
+              </div>
             </div>
 
             <div class="ws-field">
@@ -828,35 +888,39 @@ onMounted(async () => {
                     @keydown.enter.prevent="toggleImage(image)"
                     @keydown.space.prevent="toggleImage(image)"
                   >
-                    <!-- Файл берём у себя, а не по прямой ссылке: источник
-                         закрыт Cloudflare и отдаёт 403 в том числе на картинки -->
-                    <img
-                      class="gallery-thumb"
-                      :src="`/api/articles/${articleId}/images/${image.id}/raw`"
-                      :alt="image.caption_ru || image.caption || ''"
-                      loading="lazy"
-                    />
-                    <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">✓</span>
-                    <button
-                      type="button"
-                      class="gallery-remove"
-                      title="Убрать фотографию"
-                      @click.stop="removeImage(image)"
-                    >
-                      ×
-                    </button>
-                    <!-- Главная уходит в альбом первой: именно её видно
-                         в ленте канала под свёрнутым постом -->
-                    <button
-                      type="button"
-                      class="cover-mark"
-                      :class="{ 'is-on': image.is_cover }"
-                      :title="image.is_cover ? 'Это главная фотография поста' : 'Сделать главной'"
-                      :aria-pressed="image.is_cover"
-                      @click.stop="makeCover(image)"
-                    >
-                      <NavIcon name="star" />
-                    </button>
+                    <!-- Значки крепятся к самой миниатюре, а не к карточке:
+                         иначе «убрать» уезжает на подпись под фотографией -->
+                    <div class="gallery-media">
+                      <!-- Файл берём у себя, а не по прямой ссылке: источник
+                           закрыт Cloudflare и отдаёт 403 в том числе на картинки -->
+                      <img
+                        class="gallery-thumb"
+                        :src="`/api/articles/${articleId}/images/${image.id}/raw`"
+                        :alt="image.caption_ru || image.caption || ''"
+                        loading="lazy"
+                      />
+                      <!-- Главная уходит в альбом первой: именно её видно
+                           в ленте канала под свёрнутым постом -->
+                      <button
+                        type="button"
+                        class="cover-mark"
+                        :class="{ 'is-on': image.is_cover }"
+                        :title="image.is_cover ? 'Это главная фотография поста' : 'Сделать главной'"
+                        :aria-pressed="image.is_cover"
+                        @click.stop="makeCover(image)"
+                      >
+                        <NavIcon name="star" />
+                      </button>
+                      <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">✓</span>
+                      <button
+                        type="button"
+                        class="gallery-remove"
+                        title="Убрать фотографию"
+                        @click.stop="removeImage(image)"
+                      >
+                        ×
+                      </button>
+                    </div>
                     <span v-if="image.is_uploaded" class="gallery-badge">своя</span>
                     <span v-else-if="image.from_video" class="gallery-badge">видео</span>
                     <span class="gallery-caption">

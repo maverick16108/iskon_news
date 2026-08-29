@@ -377,5 +377,3 @@ export interface PostLimits {
 /** Пока настройки не загрузились, считаем по прежнему пределу. */
 export const FALLBACK_POST_LIMITS: PostLimits = { min_chars: 600, max_chars: 1000 }
 
-/** На сколько символов меняют длину кнопки «короче» и «длиннее». */
-export const RESIZE_STEP = 100
