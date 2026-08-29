@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
 from app.ai.client import AIError, refine, resize, rewrite, translate_captions
-from app.ai.config import remember_outcome
+from app.ai.config import prompt_for, remember_outcome
 from app.deps import CurrentUser, DbDep, write_audit
 from app.models import (
     MAX_POST_CHARS,
@@ -30,7 +30,6 @@ from app.models import (
     Source,
     TelegramChannel,
     User,
-    post_limits_for,
 )
 from app.parsers.fetch import FetchError, extract_text, fetch_html
 from app.parsers.images import extract_images
@@ -230,6 +229,14 @@ async def list_articles(
     query = query.order_by(direction.nullslast(), *tiebreak)
 
     rows = (await db.execute(query.limit(limit).offset(offset))).all()
+
+    # Источнику могли не назначить свой шаблон — тогда действует помеченный
+    # «по умолчанию», и предел в ленте считаем по нему же.
+    fallback_max = await db.scalar(
+        select(PromptTemplate.post_max_chars)
+        .where(PromptTemplate.is_default.is_(True))
+        .limit(1)
+    )
     repeats = await collect_repeats(db, [article for article, _, _, _, _ in rows])
 
     return [
@@ -238,7 +245,7 @@ async def list_articles(
             source_name=source_name,
             post_status=article.post.status if article.post else None,
             post_char_count=article.post.char_count if article.post else None,
-            post_max_chars=post_max_chars or MAX_POST_CHARS,
+            post_max_chars=post_max_chars or fallback_max or MAX_POST_CHARS,
             image_count=len(article.images),
             video_count=len(article.videos),
             is_viewed=viewed_at is not None,
@@ -361,8 +368,8 @@ async def get_article(article_id: int, db: DbDep, user: CurrentUser):
     # Границы длины у каждого шаблона свои, а шаблон назначен источнику —
     # значит и счётчик в редакторе у разных новостей разный.
     source = await db.get(Source, article.source_id)
-    min_chars, max_chars = post_limits_for(source)
-    detail.post_limits = PostLimits(min_chars=min_chars, max_chars=max_chars)
+    prompt = await prompt_for(source)
+    detail.post_limits = PostLimits(min_chars=prompt.min_chars, max_chars=prompt.max_chars)
 
     entries = (await collect_repeats(db, [article])).get(article.id, [])
     # Источник самой статьи в списке «где ещё» лишний

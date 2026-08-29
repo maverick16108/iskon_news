@@ -13,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import SessionFactory
-from app.models import LlmSettings
+from app.models import (
+    DEFAULT_MIN_POST_CHARS,
+    MAX_POST_CHARS,
+    LlmSettings,
+    PromptTemplate,
+    Source,
+)
 
 SINGLETON_ID = 1
 
@@ -69,6 +75,37 @@ async def current() -> LlmConfig:
         model=row.model or settings.openai_model,
         temperature=row.temperature,
     )
+
+
+@dataclass(frozen=True)
+class ResolvedPrompt:
+    """Шаблон, по которому перерабатывается новость этого источника."""
+
+    body: str | None          # None — собрать встроенный шаблон
+    min_chars: int
+    max_chars: int
+
+
+async def prompt_for(source: Source | None) -> ResolvedPrompt:
+    """Какой шаблон применяется к источнику и в какую длину укладывать пост.
+
+    Порядок такой: свой шаблон источника, затем помеченный «по умолчанию»,
+    и лишь потом встроенный. Средняя ступень тут обязательна — именно её
+    обещает интерфейс («применяется к источникам, которым свой шаблон
+    не назначен»), и без неё правки шаблона в базе никуда не доходили бы.
+    """
+    template = source.prompt_template if source is not None else None
+
+    if template is None:
+        async with SessionFactory() as db:
+            template = await db.scalar(
+                select(PromptTemplate).where(PromptTemplate.is_default.is_(True)).limit(1)
+            )
+
+    if template is None:
+        return ResolvedPrompt(None, DEFAULT_MIN_POST_CHARS, MAX_POST_CHARS)
+
+    return ResolvedPrompt(template.body, template.post_min_chars, template.post_max_chars)
 
 
 async def remember_outcome(error: str | None, *, out_of_money: bool = False) -> None:

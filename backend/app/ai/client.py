@@ -8,18 +8,11 @@ from dataclasses import dataclass
 
 from openai import APIError, AsyncOpenAI, RateLimitError
 
-from app.ai.config import LlmConfig, current as current_config
+from app.ai.config import LlmConfig, current as current_config, prompt_for
 from app.ai.hashtags import sanitize_hashtags
 from app.ai.prompt import GLOSSARY, render_system_prompt, build_user_prompt
 from app.config import settings
-from app.models import (
-    CHANNEL_TITLE,
-    Article,
-    ContentQuality,
-    Source,
-    post_limits_for,
-    render_post,
-)
+from app.models import CHANNEL_TITLE, Article, ContentQuality, Source, render_post
 
 log = logging.getLogger(__name__)
 
@@ -121,7 +114,8 @@ async def rewrite(article: Article, source: Source) -> Draft:
         raise AIError("У статьи нет текста для переработки")
 
     config = await current_config()
-    min_chars, max_chars = post_limits_for(source)
+    prompt = await prompt_for(source)
+    min_chars, max_chars = prompt.min_chars, prompt.max_chars
 
     signature = source.signature_line
     budget = _body_budget(signature, max_chars)
@@ -138,14 +132,10 @@ async def rewrite(article: Article, source: Source) -> Draft:
         is_excerpt=article.content_quality is not ContentQuality.full,
     )
 
-    # Промпт берём из шаблона, назначенного источнику; если своего нет —
-    # передаём None, и соберётся встроенный по умолчанию.
-    template = source.prompt_template.body if source.prompt_template else None
-
     messages = [
         {
             "role": "system",
-            "content": render_system_prompt(template, min_chars=min_chars, max_chars=max_chars),
+            "content": render_system_prompt(prompt.body, min_chars=min_chars, max_chars=max_chars),
         },
         {"role": "user", "content": user_prompt},
     ]
@@ -255,17 +245,16 @@ async def refine(
     берём тот же самый.
     """
     config = await current_config()
-    min_chars, max_chars = post_limits_for(source)
+    prompt = await prompt_for(source)
+    min_chars, max_chars = prompt.min_chars, prompt.max_chars
 
     signature = source.signature_line
     budget = _body_budget(signature, max_chars)
 
-    template = source.prompt_template.body if source.prompt_template else None
-
     messages = [
         {
             "role": "system",
-            "content": render_system_prompt(template, min_chars=min_chars, max_chars=max_chars),
+            "content": render_system_prompt(prompt.body, min_chars=min_chars, max_chars=max_chars),
         },
         {
             "role": "user",
@@ -461,15 +450,14 @@ async def resize(article: Article, source: Source, current: dict, target: int) -
     остаётся прежним и меняется только объём.
     """
     config = await current_config()
-    min_chars, max_chars = post_limits_for(source)
+    prompt = await prompt_for(source)
+    min_chars, max_chars = prompt.min_chars, prompt.max_chars
 
     signature = source.signature_line
-    template = source.prompt_template.body if source.prompt_template else None
-
     messages = [
         {
             "role": "system",
-            "content": render_system_prompt(template, min_chars=min_chars, max_chars=max_chars),
+            "content": render_system_prompt(prompt.body, min_chars=min_chars, max_chars=max_chars),
         },
         {
             "role": "user",

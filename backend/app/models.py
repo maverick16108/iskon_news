@@ -441,19 +441,6 @@ class PromptTemplate(Base):
     sources: Mapped[list[Source]] = relationship(back_populates="prompt_template")
 
 
-def post_limits_for(source: Source | None) -> tuple[int, int]:
-    """Границы длины поста для источника: (минимум, максимум).
-
-    Берутся из назначенного источнику шаблона. Своего шаблона нет — работаем
-    по встроенным значениям: тем же, с которыми собирается промпт
-    по умолчанию.
-    """
-    template = source.prompt_template if source is not None else None
-    if template is None:
-        return DEFAULT_MIN_POST_CHARS, MAX_POST_CHARS
-    return template.post_min_chars, template.post_max_chars
-
-
 # --------------------------------------------------------------------------
 # Настройки публикации в Telegram
 # --------------------------------------------------------------------------
