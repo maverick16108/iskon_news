@@ -148,10 +148,18 @@ export interface ArticleImage {
   from_video: boolean
 }
 
+/** Границы длины поста для конкретной статьи: из шаблона её источника. */
+export interface PostLimits {
+  min_chars: number
+  max_chars: number
+}
+
 export interface ArticleListItem extends Article {
   source_name: string
   post_status: PostStatus | null
   post_char_count: number | null
+  /** Верхняя граница из шаблона источника: по ней краснеет счётчик */
+  post_max_chars: number
   image_count: number
   video_count: number
   is_viewed: boolean       // открывал кто-нибудь из редакторов, отметка общая
@@ -195,6 +203,8 @@ export interface ArticleDetail extends Article {
   images: ArticleImage[]
   videos: ArticleVideo[]
   repeats: RepeatEntry[]
+  /** Границы длины из шаблона, назначенного источнику этой статьи */
+  post_limits: PostLimits
 }
 
 export interface AuditEntry {
@@ -234,6 +244,9 @@ export interface PromptTemplate {
   description: string | null
   body: string
   is_default: boolean
+  /** Границы длины поста, в которые модель его укладывает по этому шаблону */
+  post_min_chars: number
+  post_max_chars: number
   created_at: string
   updated_at: string
   updated_by: string | null
@@ -364,12 +377,6 @@ export interface TelegramInfo {
 /** Название канала в подписи. В посте уходит жирной ссылкой на t.me/iskconru,
  *  здесь — теми же звёздочками, что и на сервере: по этой строке считается длина. */
 export const CHANNEL_TITLE = 'Новости ИСККОН'
-
-/** Границы длины поста. Задаются суперадмином в настройках модели. */
-export interface PostLimits {
-  min_chars: number
-  max_chars: number
-}
 
 /** Пока настройки не загрузились, считаем по прежнему пределу. */
 export const FALLBACK_POST_LIMITS: PostLimits = { min_chars: 600, max_chars: 1000 }

@@ -25,11 +25,21 @@ def _to_out(row: PromptTemplate, used_by: int = 0) -> PromptOut:
         description=row.description,
         body=row.body,
         is_default=row.is_default,
+        post_min_chars=row.post_min_chars,
+        post_max_chars=row.post_max_chars,
         created_at=row.created_at,
         updated_at=row.updated_at,
         updated_by=row.updated_by.username if row.updated_by else None,
         used_by_sources=used_by,
     )
+
+
+def _check_range(min_chars: int, max_chars: int) -> None:
+    if min_chars > max_chars:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Нижняя граница длины ({min_chars}) больше верхней ({max_chars})",
+        )
 
 
 async def ensure_seeded(db: DbDep) -> None:
@@ -75,6 +85,8 @@ async def create_prompt(payload: PromptCreate, request: Request, db: DbDep, admi
     if taken:
         raise HTTPException(status.HTTP_409_CONFLICT, "Шаблон с таким названием уже есть")
 
+    _check_range(payload.post_min_chars, payload.post_max_chars)
+
     prompt = PromptTemplate(**payload.model_dump(), updated_by_id=admin.id)
     db.add(prompt)
     await db.flush()
@@ -105,6 +117,14 @@ async def update_prompt(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Шаблон не найден")
 
     changes = payload.model_dump(exclude_unset=True)
+
+    # Границы могут прийти по одной, поэтому сверяем то, что получится после
+    # правки. Иначе «поднять минимум» прошло бы мимо проверки и оставило
+    # диапазон вывернутым наизнанку.
+    _check_range(
+        changes.get("post_min_chars", prompt.post_min_chars),
+        changes.get("post_max_chars", prompt.post_max_chars),
+    )
 
     if "is_default" in changes and not changes["is_default"] and prompt.is_default:
         raise HTTPException(

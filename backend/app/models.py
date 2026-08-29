@@ -103,7 +103,12 @@ class Source(Base):
     prompt_template_id: Mapped[int | None] = mapped_column(
         ForeignKey("prompt_templates.id", ondelete="SET NULL")
     )
-    prompt_template: Mapped[PromptTemplate | None] = relationship(back_populates="sources")
+    # Грузим сразу: шаблон нужен всякий раз, когда источник вообще берут в
+    # руки, — из него идут и текст промпта, и границы длины поста. Ленивая
+    # подгрузка в асинхронной сессии здесь просто упала бы.
+    prompt_template: Mapped[PromptTemplate | None] = relationship(
+        back_populates="sources", lazy="selectin"
+    )
 
     articles: Mapped[list[Article]] = relationship(back_populates="source", cascade="all, delete-orphan")
 
@@ -419,6 +424,13 @@ class PromptTemplate(Base):
     # Применяется к источникам, которым свой шаблон не назначен
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
+    # В какую длину модель укладывает пост по этому шаблону. Своя у каждого
+    # шаблона, а не одна на всех: шаблон назначается источнику, а у разных
+    # сайтов материалы разной величины — дайджесту хватает трёх строк,
+    # репортажу мало и тысячи.
+    post_min_chars: Mapped[int] = mapped_column(Integer, default=DEFAULT_MIN_POST_CHARS)
+    post_max_chars: Mapped[int] = mapped_column(Integer, default=MAX_POST_CHARS)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -427,6 +439,19 @@ class PromptTemplate(Base):
     updated_by: Mapped[User | None] = relationship()
 
     sources: Mapped[list[Source]] = relationship(back_populates="prompt_template")
+
+
+def post_limits_for(source: Source | None) -> tuple[int, int]:
+    """Границы длины поста для источника: (минимум, максимум).
+
+    Берутся из назначенного источнику шаблона. Своего шаблона нет — работаем
+    по встроенным значениям: тем же, с которыми собирается промпт
+    по умолчанию.
+    """
+    template = source.prompt_template if source is not None else None
+    if template is None:
+        return DEFAULT_MIN_POST_CHARS, MAX_POST_CHARS
+    return template.post_min_chars, template.post_max_chars
 
 
 # --------------------------------------------------------------------------
@@ -522,12 +547,6 @@ class LlmSettings(Base):
     model: Mapped[str] = mapped_column(String(128), default="gpt-4o")
     temperature: Mapped[float] = mapped_column(Float, default=0.4)
 
-    # В какую длину модель должна уложить пост. Диапазон, а не одно число:
-    # нижняя граница не даёт ей отделаться тремя строками, верхняя — выйти
-    # за предел канала. Считается по всему посту вместе с хэштегами,
-    # заголовком и подписью — то же, что видит редактор в счётчике.
-    post_min_chars: Mapped[int] = mapped_column(Integer, default=DEFAULT_MIN_POST_CHARS)
-    post_max_chars: Mapped[int] = mapped_column(Integer, default=MAX_POST_CHARS)
 
     # Чем закончилось последнее обращение к модели. Баланс счёта OpenAI
     # через API не отдаёт — узнать о деньгах можно только по отказу,

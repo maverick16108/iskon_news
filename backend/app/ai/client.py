@@ -12,7 +12,14 @@ from app.ai.config import LlmConfig, current as current_config
 from app.ai.hashtags import sanitize_hashtags
 from app.ai.prompt import GLOSSARY, render_system_prompt, build_user_prompt
 from app.config import settings
-from app.models import CHANNEL_TITLE, Article, ContentQuality, Source, render_post
+from app.models import (
+    CHANNEL_TITLE,
+    Article,
+    ContentQuality,
+    Source,
+    post_limits_for,
+    render_post,
+)
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +121,7 @@ async def rewrite(article: Article, source: Source) -> Draft:
         raise AIError("У статьи нет текста для переработки")
 
     config = await current_config()
-    min_chars, max_chars = config.post_min_chars, config.post_max_chars
+    min_chars, max_chars = post_limits_for(source)
 
     signature = source.signature_line
     budget = _body_budget(signature, max_chars)
@@ -248,7 +255,7 @@ async def refine(
     берём тот же самый.
     """
     config = await current_config()
-    min_chars, max_chars = config.post_min_chars, config.post_max_chars
+    min_chars, max_chars = post_limits_for(source)
 
     signature = source.signature_line
     budget = _body_budget(signature, max_chars)
@@ -454,7 +461,7 @@ async def resize(article: Article, source: Source, current: dict, target: int) -
     остаётся прежним и меняется только объём.
     """
     config = await current_config()
-    min_chars, max_chars = config.post_min_chars, config.post_max_chars
+    min_chars, max_chars = post_limits_for(source)
 
     signature = source.signature_line
     template = source.prompt_template.body if source.prompt_template else None

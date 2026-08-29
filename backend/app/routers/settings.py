@@ -9,15 +9,8 @@ from openai import APIError, AuthenticationError, RateLimitError
 from app.ai.client import AIError, build_client, is_quota_error
 from app.ai.config import remember_outcome
 from app.ai.config import LlmConfig, ensure_row
-from app.deps import CurrentUser, DbDep, SuperAdmin, write_audit
-from app.schemas import (
-    LlmSettingsOut,
-    LlmSettingsUpdate,
-    LlmTestResult,
-    ModelList,
-    PostLimits,
-    PostLimitsUpdate,
-)
+from app.deps import DbDep, SuperAdmin, write_audit
+from app.schemas import LlmSettingsOut, LlmSettingsUpdate, LlmTestResult, ModelList
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings/llm", tags=["settings"])
@@ -79,47 +72,6 @@ async def update_settings(
     await db.commit()
     await db.refresh(row)
     return _to_out(row)
-
-
-@router.get("/post-limits", response_model=PostLimits)
-async def get_post_limits(db: DbDep, user: CurrentUser):
-    """Границы длины поста. Открыты любому вошедшему: по ним редактор
-    видит счётчик символов и знает, когда публикация не пройдёт."""
-    row = await ensure_row(db)
-    await db.commit()
-    await db.refresh(row)
-    return PostLimits(min_chars=row.post_min_chars, max_chars=row.post_max_chars)
-
-
-@router.patch("/post-limits", response_model=PostLimits)
-async def update_post_limits(
-    payload: PostLimitsUpdate, request: Request, db: DbDep, admin: SuperAdmin
-):
-    """Меняет границы длины. Правятся рядом с шаблонами промптов: это
-    требование к тексту, а не к подключению."""
-    if payload.min_chars > payload.max_chars:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Нижняя граница длины ({payload.min_chars}) больше верхней ({payload.max_chars})",
-        )
-
-    row = await ensure_row(db)
-    row.post_min_chars = payload.min_chars
-    row.post_max_chars = payload.max_chars
-    row.updated_by_id = admin.id
-
-    await write_audit(
-        db,
-        user=admin,
-        action="llm.post_limits",
-        entity_type="llm_settings",
-        entity_id=row.id,
-        details={"min_chars": payload.min_chars, "max_chars": payload.max_chars},
-        request=request,
-    )
-    await db.commit()
-    await db.refresh(row)
-    return PostLimits(min_chars=row.post_min_chars, max_chars=row.post_max_chars)
 
 
 @router.post("/test", response_model=LlmTestResult)

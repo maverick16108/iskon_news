@@ -1068,15 +1068,26 @@ textarea.ws-input {
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
+  padding: 0;
   border-radius: 50%;
   background: var(--scheme-accent, #1768ff);
   color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+}
+
+/* Значки рисуем иконками, а не буквами: у глифов «✓» и «×» центр
+   считается по строке, а не по самому знаку, и в кружке они сидят криво.
+   Кнопкам заодно снимаем родное отступление, иначе оно сдвигает содержимое. */
+.gallery-mark .nav-icon,
+.cover-mark .nav-icon,
+.gallery-remove .nav-icon {
+  display: block;
+  width: 13px;
+  height: 13px;
+  opacity: 1;
 }
 
 .gallery-remove {
@@ -1088,12 +1099,11 @@ textarea.ws-input {
   height: 22px;
   display: grid;
   place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   background: var(--scheme-danger, #c0392b);
   color: #fff;
-  font-size: 12px;
-  line-height: 1;
   cursor: pointer;
   opacity: 0;
   transition: opacity 160ms ease;
@@ -1791,6 +1801,7 @@ html:not(.kbd-nav) label:focus-within {
   place-items: center;
   width: 22px;
   height: 22px;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   background: rgb(9 21 41 / 45%);
@@ -1805,10 +1816,7 @@ html:not(.kbd-nav) label:focus-within {
   background: var(--scheme-accent, #1768ff);
 }
 
-.cover-mark .nav-icon {
-  width: 13px;
-  height: 13px;
-}
+
 
 .video-list {
   display: flex;

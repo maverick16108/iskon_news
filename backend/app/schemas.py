@@ -7,6 +7,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import (
+    DEFAULT_MIN_POST_CHARS,
+    MAX_POST_CHARS,
     POST_CHARS_CEILING,
     POST_CHARS_FLOOR,
     ContentQuality,
@@ -193,18 +195,32 @@ class RepeatEntry(BaseModel):
     telegram_url: str | None = None
 
 
+class PostLimits(BaseModel):
+    """Границы длины поста для этой статьи: из шаблона, назначенного её
+    источнику. По ним считается счётчик в редакторе."""
+
+    min_chars: int
+    max_chars: int
+
+
 class ArticleDetail(ArticleOut):
     content: str | None
     post: PostOut | None
     images: list[ImageOut]
     videos: list[VideoOut] = []
     repeats: list[RepeatEntry] = []   # тот же сюжет в других источниках
+    # Границы длины из шаблона, назначенного источнику этой статьи
+    post_limits: PostLimits = PostLimits(
+        min_chars=DEFAULT_MIN_POST_CHARS, max_chars=MAX_POST_CHARS
+    )
 
 
 class ArticleListItem(ArticleOut):
     source_name: str
     post_status: PostStatus | None
     post_char_count: int | None
+    # Верхняя граница из шаблона источника: по ней в ленте краснеет счётчик
+    post_max_chars: int = MAX_POST_CHARS
     image_count: int
     video_count: int = 0
     is_viewed: bool = False          # открывал ли новость кто-нибудь из редакторов
@@ -226,6 +242,8 @@ class PromptOut(BaseModel):
     description: str | None
     body: str
     is_default: bool
+    post_min_chars: int
+    post_max_chars: int
     created_at: datetime
     updated_at: datetime
     updated_by: str | None
@@ -237,6 +255,12 @@ class PromptCreate(BaseModel):
     description: str | None = Field(default=None, max_length=512)
     body: str = Field(min_length=20)
     is_default: bool = False
+    post_min_chars: int = Field(
+        default=DEFAULT_MIN_POST_CHARS, ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING
+    )
+    post_max_chars: int = Field(
+        default=MAX_POST_CHARS, ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING
+    )
 
 
 class PromptUpdate(BaseModel):
@@ -244,6 +268,12 @@ class PromptUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=512)
     body: str | None = Field(default=None, min_length=20)
     is_default: bool | None = None
+    post_min_chars: int | None = Field(
+        default=None, ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING
+    )
+    post_max_chars: int | None = Field(
+        default=None, ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING
+    )
 
 
 class PlaceholderInfo(BaseModel):
@@ -274,21 +304,6 @@ class LlmSettingsUpdate(BaseModel):
     api_key: str | None = Field(default=None, max_length=512)
     model: str | None = Field(default=None, min_length=1, max_length=128)
     temperature: float | None = Field(default=None, ge=0, le=2)
-
-
-class PostLimits(BaseModel):
-    """Границы длины поста. Живут рядом с промптом: это требование к тексту,
-    который пишет модель, а не к подключению."""
-
-    min_chars: int
-    max_chars: int
-
-
-class PostLimitsUpdate(BaseModel):
-    # Верхнюю границу ограничиваем пределом Telegram на подпись к альбому:
-    # пост почти всегда уходит с фотографиями.
-    min_chars: int = Field(ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING)
-    max_chars: int = Field(ge=POST_CHARS_FLOOR, le=POST_CHARS_CEILING)
 
 
 class PostResize(BaseModel):

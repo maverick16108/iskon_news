@@ -132,5 +132,10 @@ defineProps<{ name: string }>()
     <template v-else-if="name === 'tick'">
       <path d="M4.5 10.5l3.5 3.5 7.5-8" />
     </template>
+
+    <!-- Убрать, закрыть -->
+    <template v-else-if="name === 'close'">
+      <path d="M5.5 5.5l9 9M14.5 5.5l-9 9" />
+    </template>
   </svg>
 </template>

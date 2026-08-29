@@ -23,7 +23,22 @@ const error = ref('')
 const expanded = ref(false)
 const bodyField = ref<HTMLTextAreaElement | null>(null)
 
-const form = reactive({ name: '', description: '', body: '', is_default: false })
+const form = reactive({
+  name: '',
+  description: '',
+  body: '',
+  is_default: false,
+  post_min_chars: 600,
+  post_max_chars: 1000,
+})
+
+// Дальше этого не пустит уже Telegram: предел одного сообщения.
+const POST_CHARS_FLOOR = 200
+const POST_CHARS_CEILING = 4096
+
+const rangeError = computed(() =>
+  form.post_min_chars > form.post_max_chars ? 'Нижняя граница больше верхней' : '',
+)
 
 const dirty = computed(() => {
   if (isNew.value) return form.name.trim().length > 0 && form.body.trim().length >= 20
@@ -33,7 +48,9 @@ const dirty = computed(() => {
     (form.name !== p.name ||
       form.description !== (p.description ?? '') ||
       form.body !== p.body ||
-      form.is_default !== p.is_default)
+      form.is_default !== p.is_default ||
+      form.post_min_chars !== p.post_min_chars ||
+      form.post_max_chars !== p.post_max_chars)
   )
 })
 
@@ -50,6 +67,8 @@ async function load() {
         description: '',
         body: base?.body ?? '',
         is_default: false,
+        post_min_chars: base?.post_min_chars ?? 600,
+        post_max_chars: base?.post_max_chars ?? 1000,
       })
     } else {
       const found = all.find((p) => p.id === promptId.value)
@@ -63,6 +82,8 @@ async function load() {
         description: found.description ?? '',
         body: found.body,
         is_default: found.is_default,
+        post_min_chars: found.post_min_chars,
+        post_max_chars: found.post_max_chars,
       })
     }
   } catch (e) {
@@ -89,6 +110,11 @@ function insertPlaceholder(token: string) {
 }
 
 async function save() {
+  if (rangeError.value) {
+    error.value = rangeError.value
+    return
+  }
+
   saving.value = true
   error.value = ''
   try {
@@ -97,6 +123,8 @@ async function save() {
       description: form.description.trim() || null,
       body: form.body,
       is_default: form.is_default,
+      post_min_chars: form.post_min_chars,
+      post_max_chars: form.post_max_chars,
     }
 
     if (isNew.value) {
@@ -176,6 +204,45 @@ onMounted(async () => {
             maxlength="512"
             placeholder="Для каких источников подходит"
           />
+        </div>
+
+        <div class="ws-field" :class="{ 'is-invalid': !!rangeError }">
+          <label class="ws-field-label">Длина поста</label>
+          <div>
+            <div class="range-row">
+              <label class="range-input">
+                <span>от</span>
+                <input
+                  v-model.number="form.post_min_chars"
+                  class="ws-input"
+                  type="number"
+                  :min="POST_CHARS_FLOOR"
+                  :max="POST_CHARS_CEILING"
+                  step="50"
+                />
+              </label>
+              <label class="range-input">
+                <span>до</span>
+                <input
+                  v-model.number="form.post_max_chars"
+                  class="ws-input"
+                  type="number"
+                  :min="POST_CHARS_FLOOR"
+                  :max="POST_CHARS_CEILING"
+                  step="50"
+                />
+              </label>
+              <span class="range-unit">символов</span>
+            </div>
+            <small v-if="rangeError" class="range-alert">{{ rangeError }}</small>
+            <small class="ws-help">
+              Подставляются в инструкцию вместо <code>{min_chars}</code> и
+              <code>{max_chars}</code>. Считается по всему посту — с хэштегами,
+              заголовком и подписью. Это ориентир для модели: в редакторе длину
+              можно поднять и выше, ползунком «Размер поста». Дальше
+              {{ POST_CHARS_CEILING }} символов не пустит уже Telegram.
+            </small>
+          </div>
         </div>
 
         <div class="ws-field">

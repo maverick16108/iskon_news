@@ -13,6 +13,7 @@ from app.ai.client import AIError, refine, resize, rewrite, translate_captions
 from app.ai.config import remember_outcome
 from app.deps import CurrentUser, DbDep, write_audit
 from app.models import (
+    MAX_POST_CHARS,
     POST_CHARS_CEILING,
     Article,
     ArticleImage,
@@ -25,9 +26,11 @@ from app.models import (
     PlatformKind,
     Post,
     PostStatus,
+    PromptTemplate,
     Source,
     TelegramChannel,
     User,
+    post_limits_for,
 )
 from app.parsers.fetch import FetchError, extract_text, fetch_html
 from app.parsers.images import extract_images
@@ -44,6 +47,7 @@ from app.schemas import (
     ImageUpdate,
     Message,
     PostOut,
+    PostLimits,
     PostRefine,
     PostResize,
     PostUpdate,
@@ -168,8 +172,17 @@ async def list_articles(
     )
 
     query = (
-        select(Article, Source.name, seen.c.viewed_at, seen.c.username)
+        select(
+            Article,
+            Source.name,
+            seen.c.viewed_at,
+            seen.c.username,
+            PromptTemplate.post_max_chars,
+        )
         .join(Source, Source.id == Article.source_id)
+        # Шаблон источнику могут и не назначить — тогда работают встроенные
+        # границы, и в ленте считаем по ним же.
+        .outerjoin(PromptTemplate, PromptTemplate.id == Source.prompt_template_id)
         .outerjoin(seen, true())
         .options(
             selectinload(Article.post),
@@ -217,7 +230,7 @@ async def list_articles(
     query = query.order_by(direction.nullslast(), *tiebreak)
 
     rows = (await db.execute(query.limit(limit).offset(offset))).all()
-    repeats = await collect_repeats(db, [article for article, _, _, _ in rows])
+    repeats = await collect_repeats(db, [article for article, _, _, _, _ in rows])
 
     return [
         ArticleListItem(
@@ -225,6 +238,7 @@ async def list_articles(
             source_name=source_name,
             post_status=article.post.status if article.post else None,
             post_char_count=article.post.char_count if article.post else None,
+            post_max_chars=post_max_chars or MAX_POST_CHARS,
             image_count=len(article.images),
             video_count=len(article.videos),
             is_viewed=viewed_at is not None,
@@ -245,7 +259,7 @@ async def list_articles(
                 or any(e.post_status is PostStatus.published for e in repeats.get(article.id, []))
             ),
         )
-        for article, source_name, viewed_at, viewed_by in rows
+        for article, source_name, viewed_at, viewed_by, post_max_chars in rows
     ]
 
 
@@ -343,10 +357,16 @@ async def get_article(article_id: int, db: DbDep, user: CurrentUser):
     await db.commit()
 
     detail = ArticleDetail.model_validate(article)
+
+    # Границы длины у каждого шаблона свои, а шаблон назначен источнику —
+    # значит и счётчик в редакторе у разных новостей разный.
+    source = await db.get(Source, article.source_id)
+    min_chars, max_chars = post_limits_for(source)
+    detail.post_limits = PostLimits(min_chars=min_chars, max_chars=max_chars)
+
     entries = (await collect_repeats(db, [article])).get(article.id, [])
     # Источник самой статьи в списке «где ещё» лишний
-    own = await db.scalar(select(Source.name).where(Source.id == article.source_id))
-    detail.repeats = [e for e in entries if e.source != own]
+    detail.repeats = [e for e in entries if e.source != (source.name if source else None)]
     return detail
 
 

@@ -40,9 +40,10 @@ const draft = ref({ hashtags: '', title: '', body: '', signature: '' })
 
 const post = computed<Post | null>(() => article.value?.post ?? null)
 
-// Границы длины приходят из настроек модели. До ответа сервера считаем
-// по прежнему пределу, чтобы счётчик не мигал пустотой.
-const limits = ref<PostLimits>({ ...FALLBACK_POST_LIMITS })
+// Границы длины приходят вместе со статьёй: они заданы в шаблоне промпта,
+// назначенном её источнику, и у разных новостей разные. До ответа сервера
+// считаем по запасным, чтобы счётчик не мигал пустотой.
+const limits = computed<PostLimits>(() => article.value?.post_limits ?? FALLBACK_POST_LIMITS)
 
 /** Сборка поста повторяет серверную — по ней же считается длина.
  *  Подпись: строка источника, ниже название канала жирным. В канал оно
@@ -570,21 +571,13 @@ function onEscape(event: KeyboardEvent) {
 onMounted(() => document.addEventListener('keydown', onEscape))
 onBeforeUnmount(() => document.removeEventListener('keydown', onEscape))
 
-async function loadLimits() {
-  try {
-    limits.value = await api.get<PostLimits>('/api/settings/llm/post-limits')
-  } catch {
-    // остаёмся на запасных границах — счётчик всё равно нужен
-  }
-}
-
 onMounted(async () => {
   try {
     allowedTags.value = await api.get<string[]>('/api/hashtags')
   } catch {
     // без подсказок теги можно ввести вручную
   }
-  await Promise.all([load(), loadTelegramState(), loadLimits()])
+  await Promise.all([load(), loadTelegramState()])
 })
 </script>
 
@@ -952,14 +945,16 @@ onMounted(async () => {
                       >
                         <NavIcon name="star" />
                       </button>
-                      <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">✓</span>
+                      <span v-if="image.is_selected" class="gallery-mark" aria-hidden="true">
+                        <NavIcon name="tick" />
+                      </span>
                       <button
                         type="button"
                         class="gallery-remove"
                         title="Убрать фотографию"
                         @click.stop="removeImage(image)"
                       >
-                        ×
+                        <NavIcon name="close" />
                       </button>
                     </div>
                     <span v-if="image.is_uploaded" class="gallery-badge">своя</span>
